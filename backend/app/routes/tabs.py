@@ -87,3 +87,28 @@ def close_tab(tab_id: int, db: Session = Depends(get_db)):
         "is_open": tab.is_open,
         "is_requesting_close": tab.is_requesting_close,
     }
+
+@router.get("/table/{table_id}/open")
+def list_open_tabs_by_table(table_id: int, db: Session = Depends(get_db)):
+    table = db.query(Table).filter(Table.id == table_id).first()
+
+    if not table:
+        raise HTTPException(status_code=404, detail="Mesa não encontrada")
+
+    tabs = (
+        db.query(Tab)
+        .filter(Tab.table_id == table_id, Tab.is_open == True)
+        .all()
+    )
+
+    return [
+        {
+            "id": tab.id,
+            "table_id": tab.table_id,
+            "customer_name": tab.customer_name,
+            "customer_phone": tab.customer_phone,
+            "is_open": tab.is_open,
+            "is_requesting_close": tab.is_requesting_close,
+        }
+        for tab in tabs
+    ]
