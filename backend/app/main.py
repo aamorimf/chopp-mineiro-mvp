@@ -1,12 +1,20 @@
 from fastapi import FastAPI
 
+from app.database import init_db
+from app.seed import seed_data
+
 app = FastAPI(
-    title="Boteco do Mineiro MVP",
+    title="Chopp do Mineiro MVP",
     version="0.1.0",
 )
 
 
+@app.on_event("startup")
+def on_startup():
+    init_db()
+    seed_data()
+
+
 @app.get("/")
-def health_check() -> dict[str, str]:
-    """Return a basic health check for the API."""
-    return {"status": "ok", "message": "Boteco do Mineiro API is running"}
+def health_check():
+    return {"status": "ok"}
