@@ -14,3 +14,9 @@ class ProductResponse(BaseModel):
 
 class Config:
     from_attributes = True
+
+
+class TabCreate(BaseModel):
+    table_id: int
+    customer_name: str
+    customer_phone: str | None = None

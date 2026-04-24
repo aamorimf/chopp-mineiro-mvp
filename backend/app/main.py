@@ -2,7 +2,7 @@ from fastapi import FastAPI
 
 from app.database import init_db
 from app.seed import seed_data
-from app.routes import tables, products
+from app.routes import tables, products, tabs
 
 app = FastAPI(
     title="Chopp do Mineiro MVP",
@@ -23,3 +23,4 @@ def health_check():
 
 app.include_router(tables.router)
 app.include_router(products.router)
+app.include_router(tabs.router)
