@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import Tab, Table
+from app.models import Table, Tab, Order
 from app.schemas import TabCreate
 
 router = APIRouter(prefix="/tabs", tags=["Tabs"])
@@ -112,3 +112,65 @@ def list_open_tabs_by_table(table_id: int, db: Session = Depends(get_db)):
         }
         for tab in tabs
     ]
+
+@router.get("/{table_id}/status")
+def get_table_status(table_id: int, db: Session = Depends(get_db)):
+    table = db.query(Table).filter(Table.id == table_id).first()
+
+    if not table:
+        raise HTTPException(status_code=404, detail="Mesa não encontrada")
+
+    open_tabs = (
+        db.query(Tab)
+        .filter(Tab.table_id == table_id, Tab.is_open == True)
+        .all()
+    )
+
+    if not open_tabs:
+        return {
+            "table_id": table.id,
+            "table_number": table.number,
+            "status": "white",
+            "reason": "Mesa livre",
+            "open_tabs_count": 0,
+        }
+
+    has_close_request = any(tab.is_requesting_close for tab in open_tabs)
+
+    if has_close_request:
+        return {
+            "table_id": table.id,
+            "table_number": table.number,
+            "status": "red",
+            "reason": "Comanda solicitando fechamento",
+            "open_tabs_count": len(open_tabs),
+        }
+
+    open_tab_ids = [tab.id for tab in open_tabs]
+
+    has_pending_order = (
+        db.query(Order)
+        .filter(
+            Order.tab_id.in_(open_tab_ids),
+            Order.is_delivered == False,
+        )
+        .first()
+        is not None
+    )
+
+    if has_pending_order:
+        return {
+            "table_id": table.id,
+            "table_number": table.number,
+            "status": "yellow",
+            "reason": "Pedido pendente",
+            "open_tabs_count": len(open_tabs),
+        }
+
+    return {
+        "table_id": table.id,
+        "table_number": table.number,
+        "status": "green",
+        "reason": "Comanda aberta sem pendências",
+        "open_tabs_count": len(open_tabs),
+    }
