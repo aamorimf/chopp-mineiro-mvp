@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Painel - Chopp do Mineiro</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #fff;
+      margin: 0;
+      padding: 24px;
+    }
+
+    h1 {
+      margin-bottom: 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 16px;
+    }
+
+    .table-card {
+      border-radius: 12px;
+      padding: 20px;
+      color: #111;
+      font-weight: bold;
+      cursor: pointer;
+      min-height: 100px;
+    }
+
+    .white { background: #f5f5f5; }
+    .green { background: #44d17a; }
+    .yellow { background: #ffd447; }
+    .red { background: #ff5c5c; }
+
+    .reason {
+      font-size: 13px;
+      font-weight: normal;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Painel do Salão</h1>
+
+  <div id="tables-grid" class="grid"></div>
+
+  <script>
+    async function loadTables() {
+      const response = await fetch("http://127.0.0.1:8000/tables/status/all");
+      const tables = await response.json();
+
+      const grid = document.getElementById("tables-grid");
+      grid.innerHTML = "";
+
+      tables.forEach(table => {
+        const card = document.createElement("div");
+        card.className = `table-card ${table.status}`;
+
+        card.innerHTML = `
+          <div>Mesa ${table.table_number}</div>
+          <div class="reason">${table.reason}</div>
+          <div class="reason">Comandas abertas: ${table.open_tabs_count}</div>
+        `;
+
+        grid.appendChild(card);
+      });
+    }
+
+    loadTables();
+    setInterval(loadTables, 5000);
+  </script>
+</body>
+</html>
