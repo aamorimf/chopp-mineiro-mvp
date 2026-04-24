@@ -20,3 +20,17 @@ class TabCreate(BaseModel):
     table_id: int
     customer_name: str
     customer_phone: str | None = None
+
+
+class OrderCreate(BaseModel):
+    tab_id: int
+    product_id: int
+    quantity: int = 1
+
+
+class OrderResponse(BaseModel):
+    id: int
+    product_id: int
+    product_name: str
+    quantity: int
+    is_delivered: bool
