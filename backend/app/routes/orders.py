@@ -78,3 +78,23 @@ def list_orders_by_tab(tab_id: int, db: Session = Depends(get_db)):
         )
 
     return result
+
+@router.patch("/{order_id}/deliver")
+def mark_order_as_delivered(order_id: int, db: Session = Depends(get_db)):
+    order = db.query(Order).filter(Order.id == order_id).first()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado")
+
+    order.is_delivered = True
+
+    db.commit()
+    db.refresh(order)
+
+    return {
+        "id": order.id,
+        "tab_id": order.tab_id,
+        "product_id": order.product_id,
+        "quantity": order.quantity,
+        "is_delivered": order.is_delivered,
+    }
