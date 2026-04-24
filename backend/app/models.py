@@ -24,6 +24,7 @@ class Tab(Base):
     customer_phone = Column(String, nullable=True)
 
     is_open = Column(Boolean, default=True)
+    is_requesting_close = Column(Boolean, default=False)
 
     table = relationship("Table", back_populates="tabs")
     orders = relationship("Order", back_populates="tab")
