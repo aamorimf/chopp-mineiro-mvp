@@ -29,6 +29,8 @@ class Tab(Base):
     table = relationship("Table", back_populates="tabs")
     orders = relationship("Order", back_populates="tab")
 
+    is_calling_waiter = Column(Boolean, default=False)
+
 
 class Product(Base):
     __tablename__ = "products"

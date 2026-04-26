@@ -53,6 +53,14 @@
         <h1>Chopp do Mineiro</h1>
         <p id="table-label"></p>
 
+        <div id="table-home-card" class="card hidden">
+            <h2>Comandas desta mesa</h2>
+            <div id="open-tabs-list"></div>
+
+            <button onclick="showMenuOnly()">Ver cardápio</button>
+            <button onclick="showOpenTabForm()">Abrir nova comanda</button>
+        </div>
+
         <div id="open-tab-card" class="card">
             <h2>Abrir comanda</h2>
 
@@ -72,6 +80,13 @@
             <div id="my-orders"></div>
             <button onclick="loadMyOrders()">Atualizar comanda</button>
             <button onclick="requestCloseTab()">Encerrar comanda</button>
+            <button onclick="callWaiter()">Chamar garçom</button>
+        </div>
+
+        <div id="waiter-card" class="card hidden">
+            <h2>Garçom chamado</h2>
+            <p>Aguarde, um atendente irá até sua mesa.</p>
+            <button onclick="cancelWaiterCall()">Cancelar chamado</button>
         </div>
 
         <div id="closing-card" class="card hidden">
@@ -92,6 +107,7 @@
         const tableId = params.get("table_id") || "1";
 
         document.getElementById("table-label").textContent = `Mesa ${tableId}`;
+        loadTableContext();
         setInterval(checkTabStatus, 5000);
 
         async function openTab() {
@@ -138,18 +154,36 @@
 
         let products = [];
 
-        async function loadProducts() {
+        async function loadProducts(mode = "order") {
+            document.getElementById("products")?.remove();
+            document.querySelectorAll(".menu-warning")?.forEach(e => e.remove());
             const response = await fetch("http://127.0.0.1:8000/products/");
             products = await response.json();
 
             const container = document.createElement("div");
             container.id = "products";
+            if (mode === "menu") {
+                const warning = document.createElement("div");
+                warning.className = "card menu-warning";
+                warning.innerHTML = `
+                    <h2>📋 Apenas visualização</h2>
+                    <p>Para fazer pedidos, é necessário abrir uma comanda.</p>
+                    <button onclick="showOpenTabForm()">Abrir comanda</button>
+                `;
+                document.querySelector(".container").appendChild(warning);
+            }
 
             products.forEach(product => {
                 const btn = document.createElement("button");
 
                 btn.textContent = `${product.name} - R$ ${product.price}`;
-                btn.onclick = () => addToCart(product);
+
+                if (mode === "order") {
+                    btn.onclick = () => addToCart(product);
+                } else {
+                    btn.disabled = true;
+                    btn.style.cursor = "default";
+                }
 
                 container.appendChild(btn);
             });
@@ -376,6 +410,98 @@
 
             localStorage.removeItem("current_tab_id");
             localStorage.removeItem("current_table_id");
+        }
+
+        async function callWaiter() {
+            const tabId = localStorage.getItem("current_tab_id");
+
+            if (!tabId) return;
+
+            await fetch(`http://127.0.0.1:8000/tabs/${tabId}/call-waiter`, {
+                method: "PATCH"
+            });
+
+            document.getElementById("waiter-card").classList.remove("hidden");
+        }
+
+        async function cancelWaiterCall() {
+            const confirmed = confirm("Deseja cancelar o chamado do garçom?");
+
+            if (!confirmed) return;
+
+            const tabId = localStorage.getItem("current_tab_id");
+
+            await fetch(`http://127.0.0.1:8000/tabs/${tabId}/cancel-waiter`, {
+                method: "PATCH"
+            });
+
+            document.getElementById("waiter-card").classList.add("hidden");
+        }
+
+        async function loadTableContext() {
+            const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/details`);
+            const data = await response.json();
+
+            const tabs = data.tabs;
+
+            if (tabs.length > 0) {
+                showOpenTabs(tabs);
+            } else {
+                showEmptyTable();
+            }
+        }
+
+        function showOpenTabs(tabs) {
+            document.getElementById("open-tab-card").classList.add("hidden");
+            document.getElementById("table-home-card").classList.remove("hidden");
+
+            const list = document.getElementById("open-tabs-list");
+
+            list.innerHTML = tabs.map(tab => `
+                <div class="card">
+                    <p><strong>${tab.customer_name}</strong></p>
+                    <p>Comanda #${tab.tab_id}</p>
+                    <button onclick="enterExistingTab(${tab.tab_id})">Entrar</button>
+                </div>
+            `).join("");
+        }
+
+        function enterExistingTab(tabId) {
+            localStorage.setItem("current_tab_id", tabId);
+            localStorage.setItem("current_table_id", tableId);
+
+            document.getElementById("table-home-card").classList.add("hidden");
+            document.getElementById("my-tab-card").classList.remove("hidden");
+
+            loadProducts();
+            loadMyOrders();
+        }
+
+        function showEmptyTable() {
+            document.getElementById("open-tab-card").classList.add("hidden");
+            document.getElementById("table-home-card").classList.remove("hidden");
+
+            const list = document.getElementById("open-tabs-list");
+
+            list.innerHTML = `
+                <p>Nenhuma comanda aberta nesta mesa.</p>
+            `;
+        }
+
+        function showOpenTabForm() {
+            document.getElementById("table-home-card").classList.add("hidden");
+            document.getElementById("open-tab-card").classList.remove("hidden");
+        }
+
+        function showMenuOnly() {
+            localStorage.removeItem("current_tab_id");
+            localStorage.removeItem("current_table_id");
+
+            document.getElementById("table-home-card").classList.add("hidden");
+            document.getElementById("open-tab-card").classList.add("hidden");
+            document.getElementById("my-tab-card").classList.add("hidden");
+
+            loadProducts("menu");
         }
     </script>
 </body>

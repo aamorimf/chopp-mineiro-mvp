@@ -36,14 +36,17 @@ def build_table_status(table: Table, db: Session):
             "open_tabs_count": 0,
         }
 
-    has_close_request = any(tab.is_requesting_close for tab in open_tabs)
+    has_attention = any(
+    tab.is_requesting_close or tab.is_calling_waiter
+    for tab in open_tabs
+    )
 
-    if has_close_request:
+    if has_attention:
         return {
             "table_id": table.id,
             "table_number": table.number,
             "status": "red",
-            "reason": "Comanda solicitando fechamento",
+            "reason": "Atendimento solicitado",
             "open_tabs_count": len(open_tabs),
         }
 
@@ -124,7 +127,10 @@ def get_table_details(table_id: int, db: Session = Depends(get_db)):
         result_tabs.append({
             "tab_id": tab.id,
             "customer_name": tab.customer_name,
+            "customer_phone": tab.customer_phone,
+            "is_open": tab.is_open,
             "is_requesting_close": tab.is_requesting_close,
+            "is_calling_waiter": tab.is_calling_waiter,
             "orders": result_orders,
         })
 

@@ -145,3 +145,31 @@ def get_tab_status(tab_id: int, db: Session = Depends(get_db)):
         "is_requesting_close": tab.is_requesting_close,
     }
 
+@router.patch("/{tab_id}/call-waiter")
+def call_waiter(tab_id: int, db: Session = Depends(get_db)):
+    tab = db.query(Tab).filter(Tab.id == tab_id).first()
+
+    if not tab:
+        raise HTTPException(status_code=404, detail="Comanda não encontrada")
+
+    tab.is_calling_waiter = True
+
+    db.commit()
+    db.refresh(tab)
+
+    return {"message": "Garçom chamado"}
+
+
+@router.patch("/{tab_id}/cancel-waiter")
+def cancel_waiter(tab_id: int, db: Session = Depends(get_db)):
+    tab = db.query(Tab).filter(Tab.id == tab_id).first()
+
+    if not tab:
+        raise HTTPException(status_code=404, detail="Comanda não encontrada")
+
+    tab.is_calling_waiter = False
+
+    db.commit()
+    db.refresh(tab)
+
+    return {"message": "Chamada cancelada"}

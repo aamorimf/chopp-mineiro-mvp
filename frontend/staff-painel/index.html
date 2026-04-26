@@ -215,6 +215,11 @@
           <h3>Comanda #${tab.tab_id}</h3>
           <p><strong>Cliente:</strong> ${tab.customer_name}</p>
           <p><strong>Fechamento:</strong> ${tab.is_requesting_close ? "Solicitado" : "Não solicitado"}</p>
+          <p><strong>Atendimento:</strong> ${tab.is_calling_waiter ? "Garçom solicitado" : "Sem chamado"}</p>
+          ${tab.is_calling_waiter
+            ? `<button onclick="cancelWaiter(${tab.tab_id}, ${tableId})">Atendimento realizado</button>`
+            : ""
+          }
           ${ordersHtml}
 
           ${tab.is_requesting_close
@@ -244,6 +249,15 @@
 
     async function closeTab(tabId, tableId) {
       await fetch(`http://127.0.0.1:8000/tabs/${tabId}/close`, {
+        method: "PATCH"
+      });
+
+      await openTable(tableId);
+      await loadTables();
+    }
+
+    async function cancelWaiter(tabId, tableId) {
+      await fetch(`http://127.0.0.1:8000/tabs/${tabId}/cancel-waiter`, {
         method: "PATCH"
       });
 
