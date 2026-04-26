@@ -194,6 +194,11 @@
           <p><strong>Cliente:</strong> ${tab.customer_name}</p>
           <p><strong>Fechamento:</strong> ${tab.is_requesting_close ? "Solicitado" : "Não solicitado"}</p>
           ${ordersHtml}
+
+          ${tab.is_requesting_close
+            ? `<button onclick="closeTab(${tab.tab_id}, ${tableId})">Confirmar pagamento e fechar comanda</button>`
+            : ""
+          }
         `;
 
         body.appendChild(tabBlock);
@@ -213,6 +218,15 @@
 
     function closeModal() {
       document.getElementById("modal").classList.add("hidden");
+    }
+
+    async function closeTab(tabId, tableId) {
+      await fetch(`http://127.0.0.1:8000/tabs/${tabId}/close`, {
+        method: "PATCH"
+      });
+
+      await openTable(tableId);
+      await loadTables();
     }
 
     loadTables();
