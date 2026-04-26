@@ -116,6 +116,24 @@
     .status-delivered {
       color: #44d17a;
     }
+
+    @keyframes blink {
+      0% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.4;
+      }
+
+      100% {
+        opacity: 1;
+      }
+    }
+
+    .blink {
+      animation: blink 1s infinite;
+    }
   </style>
 </head>
 
@@ -143,6 +161,10 @@
       tables.forEach(table => {
         const card = document.createElement("div");
         card.className = `table-card ${table.status}`;
+
+        if (table.status === "red") {
+          card.classList.add("blink");
+        }
 
         card.innerHTML = `
           <div>Mesa ${table.table_number}</div>
