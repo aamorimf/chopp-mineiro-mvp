@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Chopp do Mineiro</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #fff;
+            margin: 0;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        input,
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 12px;
+            border-radius: 10px;
+            border: none;
+            font-size: 16px;
+        }
+
+        button {
+            background: #ffd447;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .card {
+            background: #222;
+            padding: 20px;
+            border-radius: 16px;
+            margin-top: 20px;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Chopp do Mineiro</h1>
+        <p id="table-label"></p>
+
+        <div id="open-tab-card" class="card">
+            <h2>Abrir comanda</h2>
+
+            <input id="customer-name" placeholder="Seu nome" />
+            <input id="customer-phone" placeholder="Telefone (opcional)" />
+
+            <button onclick="openTab()">Abrir comanda</button>
+        </div>
+
+        <div id="success-card" class="card hidden">
+            <h2>Comanda aberta ✅</h2>
+            <p id="success-message"></p>
+        </div>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const tableId = params.get("table_id") || "1";
+
+        document.getElementById("table-label").textContent = `Mesa ${tableId}`;
+
+        async function openTab() {
+            const customerName = document.getElementById("customer-name").value.trim();
+            const customerPhone = document.getElementById("customer-phone").value.trim();
+
+            if (!customerName) {
+                alert("Informe seu nome para abrir a comanda.");
+                return;
+            }
+
+            const response = await fetch("http://127.0.0.1:8000/tabs/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    table_id: Number(tableId),
+                    customer_name: customerName,
+                    customer_phone: customerPhone || null
+                })
+            });
+
+            if (!response.ok) {
+                alert("Não foi possível abrir a comanda.");
+                return;
+            }
+
+            const tab = await response.json();
+
+            localStorage.setItem("current_tab_id", tab.id);
+            localStorage.setItem("current_table_id", tableId);
+
+            document.getElementById("open-tab-card").classList.add("hidden");
+            document.getElementById("success-card").classList.remove("hidden");
+            document.getElementById("success-message").textContent =
+                `Comanda #${tab.id} aberta para ${tab.customer_name}.`;
+        }
+    </script>
+</body>
+
+</html>
