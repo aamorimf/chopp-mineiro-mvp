@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import Table, Tab, Order
+from app.models import Table, Tab, Order, Product
 from app.schemas import TableResponse
 
 router = APIRouter(prefix="/tables", tags=["Tables"])
@@ -91,3 +91,45 @@ def get_table_status(table_id: int, db: Session = Depends(get_db)):
 
     return build_table_status(table, db)
 
+@router.get("/{table_id}/details")
+def get_table_details(table_id: int, db: Session = Depends(get_db)):
+    table = db.query(Table).filter(Table.id == table_id).first()
+
+    if not table:
+        raise HTTPException(status_code=404, detail="Mesa não encontrada")
+
+    open_tabs = (
+        db.query(Tab)
+        .filter(Tab.table_id == table_id, Tab.is_open == True)
+        .all()
+    )
+
+    result_tabs = []
+
+    for tab in open_tabs:
+        orders = db.query(Order).filter(Order.tab_id == tab.id).all()
+
+        result_orders = []
+
+        for order in orders:
+            product = db.query(Product).filter(Product.id == order.product_id).first()
+
+            result_orders.append({
+                "id": order.id,
+                "product_name": product.name if product else "Produto",
+                "quantity": order.quantity,
+                "is_delivered": order.is_delivered,
+            })
+
+        result_tabs.append({
+            "tab_id": tab.id,
+            "customer_name": tab.customer_name,
+            "is_requesting_close": tab.is_requesting_close,
+            "orders": result_orders,
+        })
+
+    return {
+        "table_id": table.id,
+        "table_number": table.number,
+        "tabs": result_tabs,
+    }

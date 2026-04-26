@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8" />
   <title>Painel - Chopp do Mineiro</title>
@@ -32,15 +33,88 @@
       min-height: 100px;
     }
 
-    .white { background: #f5f5f5; }
-    .green { background: #44d17a; }
-    .yellow { background: #ffd447; }
-    .red { background: #ff5c5c; }
+    .white {
+      background: #f5f5f5;
+    }
+
+    .green {
+      background: #44d17a;
+    }
+
+    .yellow {
+      background: #ffd447;
+    }
+
+    .red {
+      background: #ff5c5c;
+    }
 
     .reason {
       font-size: 13px;
       font-weight: normal;
       margin-top: 8px;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .modal-content {
+      background: #222;
+      color: #fff;
+      width: min(640px, 90vw);
+      max-height: 80vh;
+      overflow-y: auto;
+      border-radius: 16px;
+      padding: 24px;
+      position: relative;
+    }
+
+    .close-button {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      background: transparent;
+      color: #fff;
+      border: none;
+      font-size: 28px;
+      cursor: pointer;
+    }
+
+    .tab-block {
+      border: 1px solid #444;
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    .order-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid #333;
+    }
+
+    .order-row:last-child {
+      border-bottom: none;
+    }
+
+    .status-pending {
+      color: #ffd447;
+    }
+
+    .status-delivered {
+      color: #44d17a;
     }
   </style>
 </head>
@@ -49,6 +123,14 @@
   <h1>Painel do Salão</h1>
 
   <div id="tables-grid" class="grid"></div>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-content">
+      <button class="close-button" onclick="closeModal()">×</button>
+      <h2 id="modal-title"></h2>
+      <div id="modal-body"></div>
+    </div>
+  </div>
 
   <script>
     async function loadTables() {
@@ -68,12 +150,74 @@
           <div class="reason">Comandas abertas: ${table.open_tabs_count}</div>
         `;
 
+        card.onclick = () => openTable(table.table_id);
+
         grid.appendChild(card);
       });
+    }
+
+    async function openTable(tableId) {
+      const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/details`);
+      const data = await response.json();
+
+      document.getElementById("modal-title").textContent = `Mesa ${data.table_number}`;
+
+      const body = document.getElementById("modal-body");
+      body.innerHTML = "";
+
+      if (data.tabs.length === 0) {
+        body.innerHTML = "<p>Nenhuma comanda aberta nesta mesa.</p>";
+      }
+
+      data.tabs.forEach(tab => {
+        const tabBlock = document.createElement("div");
+        tabBlock.className = "tab-block";
+
+        let ordersHtml = "";
+
+        if (tab.orders.length === 0) {
+          ordersHtml = "<p>Nenhum pedido nesta comanda.</p>";
+        } else {
+          ordersHtml = tab.orders.map(order => `
+            <div class="order-row">
+              <span>${order.product_name} x${order.quantity}</span>
+              ${order.is_delivered
+              ? `<span class="status-delivered">Entregue</span>`
+              : `<button onclick="deliverOrder(${order.id}, ${tableId})">Marcar entregue</button>`
+            } 
+            </div>
+            `).join("");
+        }
+
+        tabBlock.innerHTML = `
+          <h3>Comanda #${tab.tab_id}</h3>
+          <p><strong>Cliente:</strong> ${tab.customer_name}</p>
+          <p><strong>Fechamento:</strong> ${tab.is_requesting_close ? "Solicitado" : "Não solicitado"}</p>
+          ${ordersHtml}
+        `;
+
+        body.appendChild(tabBlock);
+      });
+
+      document.getElementById("modal").classList.remove("hidden");
+    }
+
+    async function deliverOrder(orderId, tableId) {
+      await fetch(`http://127.0.0.1:8000/orders/${orderId}/deliver`, {
+        method: "PATCH"
+      });
+
+      await openTable(tableId);
+      await loadTables();
+    }
+
+    function closeModal() {
+      document.getElementById("modal").classList.add("hidden");
     }
 
     loadTables();
     setInterval(loadTables, 5000);
   </script>
 </body>
+
 </html>
