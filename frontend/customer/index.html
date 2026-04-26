@@ -66,6 +66,25 @@
             <h2>Comanda aberta ✅</h2>
             <p id="success-message"></p>
         </div>
+
+        <div id="my-tab-card" class="card hidden">
+            <h2>Minha comanda</h2>
+            <div id="my-orders"></div>
+            <button onclick="loadMyOrders()">Atualizar comanda</button>
+            <button onclick="requestCloseTab()">Encerrar comanda</button>
+        </div>
+
+        <div id="closing-card" class="card hidden">
+            <h2>Encerramento solicitado</h2>
+            <p>Aguarde o garçom para realizar o pagamento.</p>
+
+            <button onclick="cancelCloseTab()">Cancelar encerramento</button>
+        </div>
+
+        <div id="closed-card" class="card hidden">
+            <h2>Comanda finalizada ✅</h2>
+            <p>Obrigado pela preferência. Volte sempre ao Chopp do Mineiro!</p>
+        </div>
     </div>
 
     <script>
@@ -73,6 +92,7 @@
         const tableId = params.get("table_id") || "1";
 
         document.getElementById("table-label").textContent = `Mesa ${tableId}`;
+        setInterval(checkTabStatus, 5000);
 
         async function openTab() {
             const customerName = document.getElementById("customer-name").value.trim();
@@ -109,6 +129,253 @@
             document.getElementById("success-card").classList.remove("hidden");
             document.getElementById("success-message").textContent =
                 `Comanda #${tab.id} aberta para ${tab.customer_name}.`;
+
+            loadProducts();
+
+            document.getElementById("my-tab-card").classList.remove("hidden");
+            loadMyOrders();
+        }
+
+        let products = [];
+
+        async function loadProducts() {
+            const response = await fetch("http://127.0.0.1:8000/products/");
+            products = await response.json();
+
+            const container = document.createElement("div");
+            container.id = "products";
+
+            products.forEach(product => {
+                const btn = document.createElement("button");
+
+                btn.textContent = `${product.name} - R$ ${product.price}`;
+                btn.onclick = () => addToCart(product);
+
+                container.appendChild(btn);
+            });
+
+            document.querySelector(".container").appendChild(container);
+        }
+
+        async function confirmOrder() {
+            const tabId = localStorage.getItem("current_tab_id");
+
+            if (!tabId) {
+                alert("Abra uma comanda antes de pedir.");
+                return;
+            }
+
+            if (cart.length === 0) {
+                alert("Adicione algum item antes de confirmar.");
+                return;
+            }
+
+            for (const item of cart) {
+                await fetch("http://127.0.0.1:8000/orders/", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        tab_id: Number(tabId),
+                        product_id: item.product_id,
+                        quantity: item.quantity
+                    })
+                });
+            }
+
+            cart = [];
+            renderCart();
+            loadMyOrders();
+
+            alert("Pedido enviado!");
+        }
+
+        let cart = [];
+
+        function addToCart(product) {
+            const existingItem = cart.find(item => item.product_id === product.id);
+
+            if (existingItem) {
+                existingItem.quantity += 1;
+            } else {
+                cart.push({
+                    product_id: product.id,
+                    name: product.name,
+                    quantity: 1
+                });
+            }
+
+            renderCart();
+        }
+
+        function removeFromCart(productId) {
+            cart = cart.filter(item => item.product_id !== productId);
+            renderCart();
+        }
+
+        function renderCart() {
+            let cartContainer = document.getElementById("cart");
+
+            if (!cartContainer) {
+                cartContainer = document.createElement("div");
+                cartContainer.id = "cart";
+                cartContainer.className = "card";
+                document.querySelector(".container").appendChild(cartContainer);
+            }
+
+            if (cart.length === 0) {
+                cartContainer.innerHTML = "<h2>Carrinho</h2><p>Nenhum item selecionado.</p>";
+                return;
+            }
+
+            cartContainer.innerHTML = `
+    <h2>Carrinho</h2>
+    ${cart.map(item => `
+      <p>
+        ${item.name} x${item.quantity}
+        <button onclick="removeFromCart(${item.product_id})">Remover</button>
+      </p>
+    `).join("")}
+    <button onclick="confirmOrder()">Confirmar pedido</button>
+  `;
+        }
+
+        async function loadMyOrders() {
+            const tabId = localStorage.getItem("current_tab_id");
+
+            if (!tabId) {
+                return;
+            }
+
+            const response = await fetch(`http://127.0.0.1:8000/orders/tab/${tabId}`);
+            const orders = await response.json();
+
+            const container = document.getElementById("my-orders");
+
+            if (orders.length === 0) {
+                container.innerHTML = "<p>Nenhum pedido feito ainda.</p>";
+                return;
+            }
+
+            container.innerHTML = orders.map(order => `
+    <p>
+      ${order.product_name} x${order.quantity}
+      — ${order.is_delivered ? "Entregue" : "Pendente"}
+    </p>
+  `).join("");
+        }
+
+        async function requestCloseTab() {
+            const tabId = localStorage.getItem("current_tab_id");
+
+            if (!tabId) {
+                alert("Nenhuma comanda aberta.");
+                return;
+            }
+
+            const confirmed = confirm("Deseja encerrar sua comanda e solicitar o pagamento?");
+
+            if (!confirmed) {
+                return;
+            }
+
+            const response = await fetch(`http://127.0.0.1:8000/tabs/${tabId}/request-close`, {
+                method: "PATCH"
+            });
+
+            if (!response.ok) {
+                alert("Não foi possível solicitar o fechamento da comanda.");
+                return;
+            }
+
+            alert("Fechamento solicitado. Aguarde o garçom para pagamento.");
+            loadMyOrders();
+        }
+
+        async function requestCloseTab() {
+            const tabId = localStorage.getItem("current_tab_id");
+
+            if (!tabId) {
+                alert("Nenhuma comanda aberta.");
+                return;
+            }
+
+            const confirmed = confirm("Deseja encerrar sua comanda e solicitar o pagamento?");
+
+            if (!confirmed) return;
+
+            const response = await fetch(`http://127.0.0.1:8000/tabs/${tabId}/request-close`, {
+                method: "PATCH"
+            });
+
+            if (!response.ok) {
+                alert("Erro ao solicitar fechamento.");
+                return;
+            }
+
+            // 👇 NOVO COMPORTAMENTO
+            enterClosingMode();
+        }
+
+        function enterClosingMode() {
+            document.getElementById("products")?.classList.add("hidden");
+            document.getElementById("cart")?.classList.add("hidden");
+            document.getElementById("my-tab-card")?.classList.add("hidden");
+
+            document.getElementById("closing-card").classList.remove("hidden");
+        }
+
+        async function cancelCloseTab() {
+            const confirmed = confirm("Deseja cancelar o encerramento da comanda?");
+
+            if (!confirmed) return;
+
+            const tabId = localStorage.getItem("current_tab_id");
+
+            await fetch(`http://127.0.0.1:8000/tabs/${tabId}/cancel-close`, {
+                method: "PATCH"
+            });
+
+            exitClosingMode();
+        }
+
+        function exitClosingMode() {
+            document.getElementById("products")?.classList.remove("hidden");
+            document.getElementById("cart")?.classList.remove("hidden");
+            document.getElementById("my-tab-card")?.classList.remove("hidden");
+
+            document.getElementById("closing-card").classList.add("hidden");
+        }
+
+        async function checkTabStatus() {
+            const tabId = localStorage.getItem("current_tab_id");
+
+            if (!tabId) return;
+
+            const response = await fetch(`http://127.0.0.1:8000/tabs/${tabId}/status`);
+
+            if (!response.ok) return;
+
+            const tab = await response.json();
+
+            if (!tab.is_open) {
+                enterClosedMode();
+            }
+        }
+
+        function enterClosedMode() {
+            document.getElementById("open-tab-card")?.classList.add("hidden");
+            document.getElementById("success-card")?.classList.add("hidden");
+            document.getElementById("products")?.classList.add("hidden");
+            document.getElementById("cart")?.classList.add("hidden");
+            document.getElementById("my-tab-card")?.classList.add("hidden");
+            document.getElementById("closing-card")?.classList.add("hidden");
+
+            document.getElementById("closed-card").classList.remove("hidden");
+
+            localStorage.removeItem("current_tab_id");
+            localStorage.removeItem("current_table_id");
         }
     </script>
 </body>
