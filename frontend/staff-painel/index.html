@@ -216,6 +216,7 @@
           <p><strong>Cliente:</strong> ${tab.customer_name}</p>
           <p><strong>Fechamento:</strong> ${tab.is_requesting_close ? "Solicitado" : "Não solicitado"}</p>
           <p><strong>Atendimento:</strong> ${tab.is_calling_waiter ? "Garçom solicitado" : "Sem chamado"}</p>
+          <button onclick="openNewOrder(${tab.tab_id})">Novo pedido</button>
           ${tab.is_calling_waiter
             ? `<button onclick="cancelWaiter(${tab.tab_id}, ${tableId})">Atendimento realizado</button>`
             : ""
@@ -232,6 +233,99 @@
       });
 
       document.getElementById("modal").classList.remove("hidden");
+    }
+
+    let staffCart = []
+    let selectedTabId = null
+
+    async function openNewOrder(tabId) {
+      selectedTabId = tabId
+      staffCart = []
+
+      const response = await fetch("http://127.0.0.1:8000/products/")
+      const products = await response.json()
+
+      const body = document.getElementById("modal-body")
+
+      body.innerHTML = `
+        <h3>Novo Pedido</h3>
+        <div id="product-list"></div>
+        <div id="cart"></div>
+        <button onclick="confirmStaffOrder()">Confirmar Pedido</button>
+  `
+
+      const list = document.getElementById("product-list")
+
+      products.forEach(p => {
+        const btn = document.createElement("button")
+        btn.textContent = p.name
+        btn.onclick = () => addToStaffCart(p)
+        list.appendChild(btn)
+      })
+    }
+
+    function addToStaffCart(product) {
+      const item = staffCart.find(i => i.product_id === product.id)
+
+      if (item) {
+        item.quantity++
+      } else {
+        staffCart.push({
+          product_id: product.id,
+          name: product.name,
+          quantity: 1
+        })
+      }
+
+      renderStaffCart()
+    }
+
+    function removeStaffItem(id) {
+      staffCart = staffCart.filter(i => i.product_id !== id)
+      renderStaffCart()
+    }
+
+    function renderStaffCart() {
+      const cartDiv = document.getElementById("cart")
+
+      if (staffCart.length === 0) {
+        cartDiv.innerHTML = "<p>Nenhum item</p>"
+        return
+      }
+
+      cartDiv.innerHTML = staffCart.map(item => `
+    <p>
+      ${item.name} x${item.quantity}
+      <button onclick="removeStaffItem(${item.product_id})">Remover</button>
+    </p>
+  `).join("")
+    }
+
+    async function confirmStaffOrder() {
+      if (staffCart.length === 0) {
+        alert("Adicione itens")
+        return
+      }
+
+      await fetch("http://127.0.0.1:8000/orders/batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          tab_id: selectedTabId,
+          items: staffCart.map(i => ({
+            product_id: i.product_id,
+            quantity: i.quantity
+          }))
+        })
+      })
+
+      alert("Pedido enviado")
+
+      const currentTableId = document.getElementById("modal-title").textContent.replace("Mesa ", "")
+      await openTable(Number(currentTableId))
+      await loadTables()
     }
 
     async function deliverOrder(orderId, tableId) {

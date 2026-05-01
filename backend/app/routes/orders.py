@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import Order, Product, Tab
-from app.schemas import OrderCreate
+from app.schemas import OrderCreate, OrderBatchCreate
+
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -98,3 +99,37 @@ def mark_order_as_delivered(order_id: int, db: Session = Depends(get_db)):
         "quantity": order.quantity,
         "is_delivered": order.is_delivered,
     }
+
+@router.post("/batch")
+def create_order_batch(data: OrderBatchCreate, db: Session = Depends(get_db)):
+    tab = db.query(Tab).filter(Tab.id == data.tab_id).first()
+
+    if not tab:
+        raise HTTPException(status_code=404, detail="Comanda não encontrada")
+
+    if not tab.is_open:
+        raise HTTPException(status_code=400, detail="Comanda fechada")
+
+    created_orders = []
+
+    for item in data.items:
+        product = db.query(Product).filter(Product.id == item.product_id).first()
+
+        if not product:
+            raise HTTPException(status_code=404, detail=f"Produto {item.product_id} não encontrado")
+
+        if item.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantidade inválida")
+
+        order = Order(
+            tab_id=data.tab_id,
+            product_id=item.product_id,
+            quantity=item.quantity
+        )
+
+        db.add(order)
+        created_orders.append(order)
+
+    db.commit()
+
+    return {"message": "Pedidos criados com sucesso"}

@@ -34,3 +34,12 @@ class OrderResponse(BaseModel):
     product_name: str
     quantity: int
     is_delivered: bool
+
+class OrderItem(BaseModel):
+    product_id: int
+    quantity: int
+
+
+class OrderBatchCreate(BaseModel):
+    tab_id: int
+    items: list[OrderItem]

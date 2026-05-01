@@ -58,16 +58,11 @@
             <div id="open-tabs-list"></div>
 
             <button onclick="showMenuOnly()">Ver cardápio</button>
-            <button onclick="showOpenTabForm()">Abrir nova comanda</button>
         </div>
 
-        <div id="open-tab-card" class="card">
-            <h2>Abrir comanda</h2>
-
-            <input id="customer-name" placeholder="Seu nome" />
-            <input id="customer-phone" placeholder="Telefone (opcional)" />
-
-            <button onclick="openTab()">Abrir comanda</button>
+        <div id="open-tab-card" class="card hidden">
+            <h2>Atendimento pelo garçom</h2>
+            <p>Para abrir uma comanda, chame um funcionário da casa.</p>
         </div>
 
         <div id="success-card" class="card hidden">
@@ -78,6 +73,9 @@
         <div id="my-tab-card" class="card hidden">
             <h2>Minha comanda</h2>
             <div id="my-orders"></div>
+            <hr style="border: 0; border-top: 1px solid #444; margin: 20px 0;">
+            <h3>Outras pessoas na mesa</h3>
+            <div id="others-on-table"></div>
             <button onclick="loadMyOrders()">Atualizar comanda</button>
             <button onclick="requestCloseTab()">Encerrar comanda</button>
             <button onclick="callWaiter()">Chamar garçom</button>
@@ -93,7 +91,6 @@
             <h2>Encerramento solicitado</h2>
             <p>Aguarde o garçom para realizar o pagamento.</p>
 
-            <button onclick="cancelCloseTab()">Cancelar encerramento</button>
         </div>
 
         <div id="closed-card" class="card hidden">
@@ -106,9 +103,39 @@
         const params = new URLSearchParams(window.location.search);
         const tableId = params.get("table_id") || "1";
 
-        document.getElementById("table-label").textContent = `Mesa ${tableId}`;
-        loadTableContext();
-        setInterval(checkTabStatus, 5000);
+        async function init() {
+            document.getElementById("table-label").textContent = `Mesa ${tableId}`;
+            const savedTabId = localStorage.getItem("current_tab_id");
+
+            if (savedTabId) {
+                try {
+                    const response = await fetch(`http://127.0.0.1:8000/tabs/${savedTabId}/status`);
+                    if (response.ok) {
+                        const tab = await response.json();
+
+                        if (tab.is_open) {
+                            if (tab.is_requesting_close) {
+                                enterClosingMode();
+                            } else {
+                                document.getElementById("open-tab-card").classList.add("hidden");
+                                document.getElementById("my-tab-card").classList.remove("hidden");
+                                loadProducts();
+                                loadMyOrders();
+                            }
+                            setInterval(checkTabStatus, 5000);
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error("Erro ao validar comanda salva:", error);
+                }
+                localStorage.removeItem("current_tab_id");
+            }
+
+            loadTableContext();
+        }
+
+        init();
 
         async function openTab() {
             const customerName = document.getElementById("customer-name").value.trim();
@@ -166,9 +193,6 @@
                 const warning = document.createElement("div");
                 warning.className = "card menu-warning";
                 warning.innerHTML = `
-                    <h2>📋 Apenas visualização</h2>
-                    <p>Para fazer pedidos, é necessário abrir uma comanda.</p>
-                    <button onclick="showOpenTabForm()">Abrir comanda</button>
                 `;
                 document.querySelector(".container").appendChild(warning);
             }
@@ -179,7 +203,8 @@
                 btn.textContent = `${product.name} - R$ ${product.price}`;
 
                 if (mode === "order") {
-                    btn.onclick = () => addToCart(product);
+                    btn.disabled = true;
+                    btn.style.cursor = "default";
                 } else {
                     btn.disabled = true;
                     btn.style.cursor = "default";
@@ -191,57 +216,7 @@
             document.querySelector(".container").appendChild(container);
         }
 
-        async function confirmOrder() {
-            const tabId = localStorage.getItem("current_tab_id");
-
-            if (!tabId) {
-                alert("Abra uma comanda antes de pedir.");
-                return;
-            }
-
-            if (cart.length === 0) {
-                alert("Adicione algum item antes de confirmar.");
-                return;
-            }
-
-            for (const item of cart) {
-                await fetch("http://127.0.0.1:8000/orders/", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        tab_id: Number(tabId),
-                        product_id: item.product_id,
-                        quantity: item.quantity
-                    })
-                });
-            }
-
-            cart = [];
-            renderCart();
-            loadMyOrders();
-
-            alert("Pedido enviado!");
-        }
-
         let cart = [];
-
-        function addToCart(product) {
-            const existingItem = cart.find(item => item.product_id === product.id);
-
-            if (existingItem) {
-                existingItem.quantity += 1;
-            } else {
-                cart.push({
-                    product_id: product.id,
-                    name: product.name,
-                    quantity: 1
-                });
-            }
-
-            renderCart();
-        }
 
         function removeFromCart(productId) {
             cart = cart.filter(item => item.product_id !== productId);
@@ -268,88 +243,88 @@
     ${cart.map(item => `
       <p>
         ${item.name} x${item.quantity}
-        <button onclick="removeFromCart(${item.product_id})">Remover</button>
       </p>
     `).join("")}
-    <button onclick="confirmOrder()">Confirmar pedido</button>
   `;
         }
 
         async function loadMyOrders() {
+            console.log("Atlas Debug: Botão Atualizar clicado."); // Adicione isso
             const tabId = localStorage.getItem("current_tab_id");
 
             if (!tabId) {
+                console.warn("Atlas Debug: tabId não encontrado no localStorage.");
                 return;
             }
 
-            const response = await fetch(`http://127.0.0.1:8000/orders/tab/${tabId}`);
-            const orders = await response.json();
+            try {
+                const response = await fetch(`http://127.0.0.1:8000/orders/tab/${tabId}`);
+                const orders = await response.json();
 
-            const container = document.getElementById("my-orders");
+                const container = document.getElementById("my-orders");
+                if (!container) return;
 
-            if (orders.length === 0) {
-                container.innerHTML = "<p>Nenhum pedido feito ainda.</p>";
-                return;
+                if (orders.length === 0) {
+                    container.innerHTML = "<p>Nenhum pedido feito ainda.</p>";
+                } else {
+                    container.innerHTML = orders.map(order => `
+                <p>${order.product_name} x${order.quantity} — ${order.is_delivered ? "Entregue" : "Pendente"}</p>
+            `).join("");
+                }
+
+                // Tenta carregar os outros, mas sem deixar travar se falhar
+                await loadOthersOnTable();
+            } catch (error) {
+                console.error("Atlas Debug: Erro ao carregar pedidos:", error);
             }
+        }
 
-            container.innerHTML = orders.map(order => `
-    <p>
-      ${order.product_name} x${order.quantity}
-      — ${order.is_delivered ? "Entregue" : "Pendente"}
-    </p>
-  `).join("");
+        async function loadOthersOnTable() {
+            const currentTabId = localStorage.getItem("current_tab_id");
+            const othersContainer = document.getElementById("others-on-table");
+
+            if (!othersContainer) return;
+
+            try {
+                // Adicionamos um timestamp para evitar cache do navegador e garantir dado novo
+                const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/details?t=${Date.now()}`);
+                const data = await response.json();
+
+                // Filtra: string para número para garantir a comparação
+                const others = data.tabs.filter(t => Number(t.tab_id) !== Number(currentTabId));
+
+                if (others.length === 0) {
+                    othersContainer.innerHTML = "<p style='font-size: 0.9em; color: #888;'>Só você está nesta mesa.</p>";
+                } else {
+                    othersContainer.innerHTML = others.map(t => `
+                <p style="font-size: 0.9em; background: #333; padding: 10px; border-radius: 8px; margin-bottom: 5px; border-left: 3px solid #ffd447;">
+                    👤 ${t.customer_name} (Comanda #${t.tab_id})
+                </p>
+            `).join("");
+                }
+            } catch (error) {
+                console.error("Atlas Debug - Erro ao carregar outros clientes:", error);
+                othersContainer.innerHTML = "<p style='color: red;'>Erro ao carregar mesa.</p>";
+            }
         }
 
         async function requestCloseTab() {
-            const tabId = localStorage.getItem("current_tab_id");
-
-            if (!tabId) {
-                alert("Nenhuma comanda aberta.");
-                return;
-            }
+            const tab_id = localStorage.getItem("current_tab_id");
+            if (!tab_id) return;
 
             const confirmed = confirm("Deseja encerrar sua comanda e solicitar o pagamento?");
-
-            if (!confirmed) {
-                return;
-            }
-
-            const response = await fetch(`http://127.0.0.1:8000/tabs/${tabId}/request-close`, {
-                method: "PATCH"
-            });
-
-            if (!response.ok) {
-                alert("Não foi possível solicitar o fechamento da comanda.");
-                return;
-            }
-
-            alert("Fechamento solicitado. Aguarde o garçom para pagamento.");
-            loadMyOrders();
-        }
-
-        async function requestCloseTab() {
-            const tabId = localStorage.getItem("current_tab_id");
-
-            if (!tabId) {
-                alert("Nenhuma comanda aberta.");
-                return;
-            }
-
-            const confirmed = confirm("Deseja encerrar sua comanda e solicitar o pagamento?");
-
             if (!confirmed) return;
 
-            const response = await fetch(`http://127.0.0.1:8000/tabs/${tabId}/request-close`, {
-                method: "PATCH"
-            });
-
-            if (!response.ok) {
-                alert("Erro ao solicitar fechamento.");
-                return;
+            try {
+                const response = await fetch(`http://127.0.0.1:8000/tabs/${tab_id}/request-close`, { method: "PATCH" });
+                if (response.ok) {
+                    enterClosingMode();
+                } else {
+                    alert("Erro ao solicitar fechamento no servidor.");
+                }
+            } catch (error) {
+                console.error("Erro na requisição de fechamento:", error);
             }
-
-            // 👇 NOVO COMPORTAMENTO
-            enterClosingMode();
         }
 
         function enterClosingMode() {
@@ -439,15 +414,37 @@
         }
 
         async function loadTableContext() {
-            const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/details`);
-            const data = await response.json();
+            try {
+                const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/details`);
+                if (!response.ok) throw new Error("Erro ao carregar mesa");
 
-            const tabs = data.tabs;
+                const data = await response.json();
+                const tabs = data.tabs || [];
 
-            if (tabs.length > 0) {
-                showOpenTabs(tabs);
-            } else {
-                showEmptyTable();
+                // Esconde o formulário de abertura inicial para decidir o que mostrar
+                document.getElementById("open-tab-card").classList.add("hidden");
+                document.getElementById("table-home-card").classList.remove("hidden");
+
+                const list = document.getElementById("open-tabs-list");
+
+                if (tabs.length > 0) {
+                    // Se houver comandas na mesa, mostra a lista para o novo cliente decidir
+                    list.innerHTML = `
+                <p>Comandas abertas nesta mesa:</p>
+                ${tabs.map(tab => `
+                    <div class="card" style="border-left: 4px solid #ffd447;">
+                        <p><strong>${tab.customer_name}</strong></p>
+                        <p>Comanda #${tab.tab_id}</p>
+                        <button onclick="enterExistingTab(${tab.tab_id})">Esta é minha comanda</button>
+                    </div>
+                `).join("")}
+            `;
+                } else {
+                    // Mesa totalmente vazia
+                    list.innerHTML = `<p>Mesa livre. Seja bem-vindo!</p>`;
+                }
+            } catch (error) {
+                console.error("Falha ao carregar contexto da mesa:", error);
             }
         }
 

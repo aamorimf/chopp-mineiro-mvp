@@ -43,6 +43,7 @@ class Product(Base):
 
 class Order(Base):
     __tablename__ = "orders"
+    is_cancelled = Column(Boolean, default=False)
 
     id = Column(Integer, primary_key=True, index=True)
 
