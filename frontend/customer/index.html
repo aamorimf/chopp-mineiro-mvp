@@ -58,6 +58,7 @@
             <div id="open-tabs-list"></div>
 
             <button onclick="showMenuOnly()">Ver cardápio</button>
+            <button onclick="callWaiterFromTable()">Chamar garçom</button>
         </div>
 
         <div id="open-tab-card" class="card hidden">
@@ -95,7 +96,10 @@
 
         <div id="closed-card" class="card hidden">
             <h2>Comanda finalizada ✅</h2>
-            <p>Obrigado pela preferência. Volte sempre ao Chopp do Mineiro!</p>
+            <p>Obrigado pela preferência 🍻</p>
+            <p>Siga nosso Instagram:</p>
+            <a href="https://www.instagram.com/choppdomineiro/" target="_blank"
+                style="color: #ffd447;">@choppdomineiro</a>
         </div>
     </div>
 
@@ -249,7 +253,7 @@
         }
 
         async function loadMyOrders() {
-            console.log("Atlas Debug: Botão Atualizar clicado."); // Adicione isso
+            console.log("Atlas Debug: Botão Atualizar clicado.");
             const tabId = localStorage.getItem("current_tab_id");
 
             if (!tabId) {
@@ -259,20 +263,38 @@
 
             try {
                 const response = await fetch(`http://127.0.0.1:8000/orders/tab/${tabId}`);
-                const orders = await response.json();
+                const data = await response.json();
+                const orders = data.orders;
+                const total = data.total;
+                const isConfirmed = data.is_closing_confirmed;
 
                 const container = document.getElementById("my-orders");
                 if (!container) return;
 
                 if (orders.length === 0) {
                     container.innerHTML = "<p>Nenhum pedido feito ainda.</p>";
+                } else if (isConfirmed) {
+                    container.innerHTML = `
+                <h2>🧾 Consumo da Comanda</h2>
+                ${orders.map(order => `
+                    <p>
+                        ${order.product_name} x${order.quantity}
+                        — R$ ${order.subtotal.toFixed(2)}
+                    </p>
+                `).join("")}
+                <hr>
+                <h2>Total: R$ ${total.toFixed(2)}</h2>
+                <p>Aguarde o garçom para realizar o pagamento.</p>
+            `;
                 } else {
                     container.innerHTML = orders.map(order => `
-                <p>${order.product_name} x${order.quantity} — ${order.is_delivered ? "Entregue" : "Pendente"}</p>
+                <p>
+                    ${order.product_name} x${order.quantity}
+                    — ${order.is_delivered ? "Entregue" : "Pendente"}
+                </p>
             `).join("");
                 }
 
-                // Tenta carregar os outros, mas sem deixar travar se falhar
                 await loadOthersOnTable();
             } catch (error) {
                 console.error("Atlas Debug: Erro ao carregar pedidos:", error);
@@ -330,9 +352,11 @@
         function enterClosingMode() {
             document.getElementById("products")?.classList.add("hidden");
             document.getElementById("cart")?.classList.add("hidden");
-            document.getElementById("my-tab-card")?.classList.add("hidden");
 
             document.getElementById("closing-card").classList.remove("hidden");
+            document.getElementById("my-tab-card").classList.remove("hidden");
+
+            loadMyOrders();
         }
 
         async function cancelCloseTab() {
@@ -385,6 +409,10 @@
 
             localStorage.removeItem("current_tab_id");
             localStorage.removeItem("current_table_id");
+
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
         }
 
         async function callWaiter() {
@@ -406,9 +434,15 @@
 
             const tabId = localStorage.getItem("current_tab_id");
 
-            await fetch(`http://127.0.0.1:8000/tabs/${tabId}/cancel-waiter`, {
-                method: "PATCH"
-            });
+            if (tabId) {
+                await fetch(`http://127.0.0.1:8000/tabs/${tabId}/cancel-waiter`, {
+                    method: "PATCH"
+                });
+            } else {
+                await fetch(`http://127.0.0.1:8000/tables/${tableId}/cancel-waiter`, {
+                    method: "PATCH"
+                });
+            }
 
             document.getElementById("waiter-card").classList.add("hidden");
         }
@@ -499,6 +533,19 @@
             document.getElementById("my-tab-card").classList.add("hidden");
 
             loadProducts("menu");
+        }
+
+        async function callWaiterFromTable() {
+            const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/call-waiter`, {
+                method: "PATCH"
+            });
+
+            if (!response.ok) {
+                alert("Não foi possível chamar o garçom.");
+                return;
+            }
+
+            document.getElementById("waiter-card").classList.remove("hidden");
         }
     </script>
 </body>

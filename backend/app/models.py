@@ -9,7 +9,7 @@ class Table(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     number = Column(Integer, unique=True, nullable=False)
-
+    is_calling_waiter = Column(Boolean, default=False)
     tabs = relationship("Tab", back_populates="table")
 
 
@@ -22,14 +22,17 @@ class Tab(Base):
 
     customer_name = Column(String, nullable=False)
     customer_phone = Column(String, nullable=True)
+    observation = Column(String, nullable=True)
+    grouped_table_ids = Column(String, nullable=True)
 
     is_open = Column(Boolean, default=True)
+
     is_requesting_close = Column(Boolean, default=False)
+    is_closing_confirmed = Column(Boolean, default=False)
+    is_calling_waiter = Column(Boolean, default=False)
 
     table = relationship("Table", back_populates="tabs")
     orders = relationship("Order", back_populates="tab")
-
-    is_calling_waiter = Column(Boolean, default=False)
 
 
 class Product(Base):

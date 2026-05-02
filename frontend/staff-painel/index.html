@@ -47,6 +47,7 @@
 
     .red {
       background: #ff5c5c;
+      color: #fff;
     }
 
     .reason {
@@ -162,7 +163,7 @@
         const card = document.createElement("div");
         card.className = `table-card ${table.status}`;
 
-        if (table.status === "red") {
+        if (table.status === "red" && table.attention_type === "close_request") {
           card.classList.add("blink");
         }
 
@@ -186,9 +187,16 @@
 
       const body = document.getElementById("modal-body");
       body.innerHTML = "";
+      body.innerHTML = `
+          <button onclick="openCreateTabForm(${tableId})">Abrir nova comanda</button>
+          ${data.is_calling_waiter
+          ? `<button onclick="resolveTableWaiterCall(${tableId})">Atendimento realizado</button>`
+          : ""
+        }
+        `;
 
       if (data.tabs.length === 0) {
-        body.innerHTML = "<p>Nenhuma comanda aberta nesta mesa.</p>";
+        body.innerHTML += "<p>Nenhuma comanda aberta nesta mesa.</p>";
       }
 
       data.tabs.forEach(tab => {
@@ -196,37 +204,66 @@
         tabBlock.className = "tab-block";
 
         let ordersHtml = "";
+        let total = 0;
 
         if (tab.orders.length === 0) {
           ordersHtml = "<p>Nenhum pedido nesta comanda.</p>";
         } else {
-          ordersHtml = tab.orders.map(order => `
-            <div class="order-row">
-              <span>${order.product_name} x${order.quantity}</span>
-              ${order.is_delivered
-              ? `<span class="status-delivered">Entregue</span>`
-              : `<button onclick="deliverOrder(${order.id}, ${tableId})">Marcar entregue</button>`
-            } 
-            </div>
-            `).join("");
+          ordersHtml = tab.orders.map(order => {
+
+            const price = order.price || 0;
+            total += price * order.quantity;
+
+            return `
+              <div class="order-row">
+                <span>${order.product_name} x${order.quantity}</span>
+                ${tab.is_closing_confirmed
+                ? `<span>R$ ${(price * order.quantity).toFixed(2)}</span>`
+                : ""
+              }
+                ${order.is_delivered
+                ? `<span class="status-delivered">Entregue</span>`
+                : `
+                    <button onclick="deliverOrder(${order.id}, ${tableId})">Marcar entregue</button>
+                    <button onclick="cancelOrder(${order.id}, ${tableId})">Cancelar pedido</button>
+                  `
+              }
+              </div>
+            `;
+          }).join("");
+
+          if (tab.is_closing_confirmed) {
+            ordersHtml += `<hr><strong>Total: R$ ${total.toFixed(2)}</strong>`;
+          }
         }
 
         tabBlock.innerHTML = `
           <h3>Comanda #${tab.tab_id}</h3>
           <p><strong>Cliente:</strong> ${tab.customer_name}</p>
-          <p><strong>Fechamento:</strong> ${tab.is_requesting_close ? "Solicitado" : "Não solicitado"}</p>
+          <p><strong>Observação:</strong> ${tab.observation || "Sem observação"}</p>
+          <p><strong>Mesas agrupadas:</strong> ${tab.grouped_table_ids || data.table_number}</p>
+          <p><strong>Fechamento:</strong> ${tab.is_closing_confirmed
+            ? "Confirmado"
+            : tab.is_requesting_close
+              ? "Solicitado"
+              : "Não solicitado"
+          }</p>
+          ${tab.is_requesting_close && !tab.is_closing_confirmed
+            ? `<button onclick="confirmClose(${tab.tab_id}, ${tableId})">Fechar comanda</button>`
+            : ""
+          }
+
+          ${tab.is_closing_confirmed
+            ? `<button onclick="closeTab(${tab.tab_id}, ${tableId})">Confirmar pagamento e encerrar</button>`
+            : ""
+          }
           <p><strong>Atendimento:</strong> ${tab.is_calling_waiter ? "Garçom solicitado" : "Sem chamado"}</p>
           <button onclick="openNewOrder(${tab.tab_id})">Novo pedido</button>
           ${tab.is_calling_waiter
-            ? `<button onclick="cancelWaiter(${tab.tab_id}, ${tableId})">Atendimento realizado</button>`
+            ? `<button onclick="resolveWaiterCall(${tab.tab_id}, ${tableId})">Atendimento realizado</button>`
             : ""
           }
           ${ordersHtml}
-
-          ${tab.is_requesting_close
-            ? `<button onclick="closeTab(${tab.tab_id}, ${tableId})">Confirmar pagamento e fechar comanda</button>`
-            : ""
-          }
         `;
 
         body.appendChild(tabBlock);
@@ -337,6 +374,19 @@
       await loadTables();
     }
 
+    async function cancelOrder(orderId, tableId) {
+      const confirmed = confirm("Deseja cancelar este pedido?");
+
+      if (!confirmed) return;
+
+      await fetch(`http://127.0.0.1:8000/orders/${orderId}/cancel`, {
+        method: "PATCH"
+      });
+
+      await openTable(tableId);
+      await loadTables();
+    }
+
     function closeModal() {
       document.getElementById("modal").classList.add("hidden");
     }
@@ -350,8 +400,89 @@
       await loadTables();
     }
 
-    async function cancelWaiter(tabId, tableId) {
+    async function resolveWaiterCall(tabId, tableId) {
+      // limpa chamada da comanda
       await fetch(`http://127.0.0.1:8000/tabs/${tabId}/cancel-waiter`, {
+        method: "PATCH"
+      });
+
+      // limpa chamada da mesa
+      await fetch(`http://127.0.0.1:8000/tables/${tableId}/cancel-waiter`, {
+        method: "PATCH"
+      });
+
+      await openTable(tableId);
+      await loadTables();
+    }
+
+    async function openCreateTabForm(tableId) {
+      const response = await fetch("http://127.0.0.1:8000/tables/");
+      const tables = await response.json();
+
+      const body = document.getElementById("modal-body");
+
+      body.innerHTML = `
+    <h3>Abrir comanda</h3>
+
+    <label>Nome do cliente ou grupo:</label>
+    <input id="new-tab-name" placeholder="Ex: João / Mesa da família" />
+
+    <label>Observação:</label>
+    <textarea id="new-tab-observation" placeholder="Ex: Mesa junto com a 2, aniversário, sem gelo..." style="width:100%; min-height:80px; margin-top:12px;"></textarea>
+
+    <h4>Agrupar mesas</h4>
+    <div id="group-tables-list"></div>
+
+    <button onclick="confirmCreateTab(${tableId})">Abrir comanda</button>
+  `;
+
+      const list = document.getElementById("group-tables-list");
+
+      list.innerHTML = tables.map(table => `
+    <label style="display:block; margin-top:8px;">
+      <input 
+        type="checkbox" 
+        class="group-table-checkbox" 
+        value="${table.id}" 
+        ${table.id === tableId ? "checked" : ""}
+      />
+      Mesa ${table.number}
+    </label>
+  `).join("");
+    }
+
+    async function confirmCreateTab(tableId) {
+      const name = document.getElementById("new-tab-name").value.trim();
+      const observation = document.getElementById("new-tab-observation").value.trim();
+
+      if (!name) {
+        alert("Informe o nome do cliente ou grupo.");
+        return;
+      }
+
+      const selectedTables = Array.from(document.querySelectorAll(".group-table-checkbox:checked"))
+        .map(input => Number(input.value));
+
+      await fetch("http://127.0.0.1:8000/tabs/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          table_id: tableId,
+          customer_name: name,
+          customer_phone: null,
+          observation: observation || null,
+          grouped_table_ids: selectedTables
+        })
+      });
+
+      await openTable(tableId);
+      await loadTables();
+    }
+
+    async function resolveTableWaiterCall(tableId) {
+      await fetch(`http://127.0.0.1:8000/tables/${tableId}/cancel-waiter`, {
         method: "PATCH"
       });
 
@@ -361,6 +492,16 @@
 
     loadTables();
     setInterval(loadTables, 5000);
+
+    async function confirmClose(tabId, tableId) {
+      await fetch(`http://127.0.0.1:8000/tabs/${tabId}/confirm-close`, {
+        method: "PATCH"
+      });
+
+      await openTable(tableId);
+      await loadTables();
+    }
+
   </script>
 </body>
 

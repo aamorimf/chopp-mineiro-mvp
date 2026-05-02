@@ -20,6 +20,8 @@ class TabCreate(BaseModel):
     table_id: int
     customer_name: str
     customer_phone: str | None = None
+    observation: str | None = None
+    grouped_table_ids: list[int] | None = None
 
 
 class OrderCreate(BaseModel):

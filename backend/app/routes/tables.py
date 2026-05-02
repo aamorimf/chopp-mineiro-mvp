@@ -15,40 +15,75 @@ def get_db():
     finally:
         db.close()
 
+def tab_belongs_to_table(tab: Tab, table_id: int) -> bool:
+    if tab.table_id == table_id:
+        return True
+
+    if not tab.grouped_table_ids:
+        return False
+
+    grouped_ids = [
+        int(id.strip())
+        for id in tab.grouped_table_ids.split(",")
+        if id.strip().isdigit()
+    ]
+
+    return table_id in grouped_ids
+
 
 @router.get("/", response_model=list[TableResponse])
 def list_tables(db: Session = Depends(get_db)):
     return db.query(Table).order_by(Table.number).all()
 
 def build_table_status(table: Table, db: Session):
-    open_tabs = (
-        db.query(Tab)
-        .filter(Tab.table_id == table.id, Tab.is_open == True)
-        .all()
-    )
+    all_open_tabs = db.query(Tab).filter(Tab.is_open == True).all()
+    open_tabs = [tab for tab in all_open_tabs if tab_belongs_to_table(tab, table.id)]
+
+    if table.is_calling_waiter:
+        return {
+            "table_id": table.id,
+            "table_number": table.number,
+            "status": "red",
+            "attention_type": "waiter_call",
+            "reason": "Garçom solicitado",
+            "open_tabs_count": len(open_tabs),
+            "is_calling_waiter": True,
+        }
 
     if not open_tabs:
         return {
             "table_id": table.id,
             "table_number": table.number,
             "status": "white",
+            "attention_type": None,
             "reason": "Mesa livre",
             "open_tabs_count": 0,
-        }
+            "is_calling_waiter": False,
+    }
 
-    has_attention = any(
-    tab.is_requesting_close or tab.is_calling_waiter
-    for tab in open_tabs
-    )
+    has_close_request = any(tab.is_requesting_close for tab in open_tabs)
+    has_waiter_call = table.is_calling_waiter or any(tab.is_calling_waiter for tab in open_tabs)
 
-    if has_attention:
+    if has_close_request:
         return {
             "table_id": table.id,
             "table_number": table.number,
             "status": "red",
-            "reason": "Atendimento solicitado",
+            "attention_type": "close_request",
+            "reason": "Fechamento solicitado",
             "open_tabs_count": len(open_tabs),
         }
+
+    if has_waiter_call:
+        return {
+            "table_id": table.id,
+            "table_number": table.number,
+            "status": "red",
+            "attention_type": "waiter_call",
+            "reason": "Garçom solicitado",
+            "open_tabs_count": len(open_tabs),
+            "is_calling_waiter": True
+}
 
     open_tab_ids = [tab.id for tab in open_tabs]
 
@@ -57,6 +92,7 @@ def build_table_status(table: Table, db: Session):
         .filter(
             Order.tab_id.in_(open_tab_ids),
             Order.is_delivered == False,
+            Order.is_cancelled == False,
         )
         .first()
         is not None
@@ -101,16 +137,17 @@ def get_table_details(table_id: int, db: Session = Depends(get_db)):
     if not table:
         raise HTTPException(status_code=404, detail="Mesa não encontrada")
 
-    open_tabs = (
-        db.query(Tab)
-        .filter(Tab.table_id == table_id, Tab.is_open == True)
-        .all()
-    )
+    all_open_tabs = db.query(Tab).filter(Tab.is_open == True).all()
+    open_tabs = [tab for tab in all_open_tabs if tab_belongs_to_table(tab, table_id)]
 
     result_tabs = []
 
     for tab in open_tabs:
-        orders = db.query(Order).filter(Order.tab_id == tab.id).all()
+        orders = (
+            db.query(Order)
+            .filter(Order.tab_id == tab.id, Order.is_cancelled == False)
+            .all()
+        )
 
         result_orders = []
 
@@ -122,6 +159,7 @@ def get_table_details(table_id: int, db: Session = Depends(get_db)):
                 "product_name": product.name if product else "Produto",
                 "quantity": order.quantity,
                 "is_delivered": order.is_delivered,
+                "price": product.price if product else 0,
             })
 
         result_tabs.append({
@@ -130,12 +168,45 @@ def get_table_details(table_id: int, db: Session = Depends(get_db)):
             "customer_phone": tab.customer_phone,
             "is_open": tab.is_open,
             "is_requesting_close": tab.is_requesting_close,
+            "is_closing_confirmed": tab.is_closing_confirmed,
             "is_calling_waiter": tab.is_calling_waiter,
             "orders": result_orders,
+            "observation": tab.observation,
+            "grouped_table_ids": tab.grouped_table_ids,
         })
 
     return {
         "table_id": table.id,
         "table_number": table.number,
+        "is_calling_waiter": table.is_calling_waiter,
         "tabs": result_tabs,
     }
+
+@router.patch("/{table_id}/call-waiter")
+def call_waiter_from_table(table_id: int, db: Session = Depends(get_db)):
+    table = db.query(Table).filter(Table.id == table_id).first()
+
+    if not table:
+        raise HTTPException(status_code=404, detail="Mesa não encontrada")
+
+    table.is_calling_waiter = True
+
+    db.commit()
+    db.refresh(table)
+
+    return {"message": "Garçom chamado pela mesa"}
+
+
+@router.patch("/{table_id}/cancel-waiter")
+def cancel_waiter_from_table(table_id: int, db: Session = Depends(get_db)):
+    table = db.query(Table).filter(Table.id == table_id).first()
+
+    if not table:
+        raise HTTPException(status_code=404, detail="Mesa não encontrada")
+
+    table.is_calling_waiter = False
+
+    db.commit()
+    db.refresh(table)
+
+    return {"message": "Chamado da mesa cancelado"}
