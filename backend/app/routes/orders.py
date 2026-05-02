@@ -173,6 +173,52 @@ def create_order_batch(data: OrderBatchCreate, db: Session = Depends(get_db)):
 
     if not tab.is_open:
         raise HTTPException(status_code=400, detail="Comanda fechada")
+
+    # Limpa chamado da própria comanda
+    tab.is_calling_waiter = False
+
+    # Limpa chamado da mesa principal e mesas agrupadas
+    table_ids = [tab.table_id]
+
+    if tab.grouped_table_ids:
+        table_ids.extend(
+            int(table_id.strip())
+            for table_id in tab.grouped_table_ids.split(",")
+            if table_id.strip().isdigit()
+        )
+
+    tables = db.query(Table).filter(Table.id.in_(set(table_ids))).all()
+
+    for table in tables:
+        table.is_calling_waiter = False
+
+    for item in data.items:
+        product = db.query(Product).filter(Product.id == item.product_id).first()
+
+        if not product:
+            raise HTTPException(status_code=404, detail=f"Produto {item.product_id} não encontrado")
+
+        if item.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantidade inválida")
+
+        order = Order(
+            tab_id=data.tab_id,
+            product_id=item.product_id,
+            quantity=item.quantity
+        )
+
+        db.add(order)
+
+    db.commit()
+
+    return {"message": "Pedidos criados com sucesso"}
+    tab = db.query(Tab).filter(Tab.id == data.tab_id).first()
+
+    if not tab:
+        raise HTTPException(status_code=404, detail="Comanda não encontrada")
+
+    if not tab.is_open:
+        raise HTTPException(status_code=400, detail="Comanda fechada")
         clear_waiter_calls_for_tab(tab, db)
         tab.is_calling_waiter = False
 

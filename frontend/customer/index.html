@@ -58,7 +58,7 @@
             <div id="open-tabs-list"></div>
 
             <button onclick="showMenuOnly()">Ver cardápio</button>
-            <button onclick="callWaiterFromTable()">Chamar garçom</button>
+            <button id="call-waiter-btn" onclick="callWaiterFromTable()">Chamar garçom</button>
         </div>
 
         <div id="open-tab-card" class="card hidden">
@@ -126,7 +126,7 @@
                                 loadProducts();
                                 loadMyOrders();
                             }
-                            setInterval(checkTabStatus, 5000);
+                            startAutoRefresh();
                             return;
                         }
                     }
@@ -140,6 +140,8 @@
         }
 
         init();
+
+        startAutoRefresh();
 
         async function openTab() {
             const customerName = document.getElementById("customer-name").value.trim();
@@ -381,6 +383,19 @@
             document.getElementById("closing-card").classList.add("hidden");
         }
 
+        function startAutoRefresh() {
+            setInterval(async () => {
+                const tabId = localStorage.getItem("current_tab_id");
+
+                if (tabId) {
+                    await checkTabStatus();
+                    await loadMyOrders();
+                } else {
+                    await loadTableContext();
+                }
+            }, 3000);
+        }
+
         async function checkTabStatus() {
             const tabId = localStorage.getItem("current_tab_id");
 
@@ -480,6 +495,14 @@
             } catch (error) {
                 console.error("Falha ao carregar contexto da mesa:", error);
             }
+
+            const hasOpenTabs = data.tabs && data.tabs.length > 0;
+
+            const btn = document.getElementById("call-waiter-btn");
+
+            if (btn) {
+                btn.style.display = hasOpenTabs ? "block" : "none";
+            }
         }
 
         function showOpenTabs(tabs) {
@@ -541,12 +564,15 @@
             });
 
             if (!response.ok) {
-                alert("Não foi possível chamar o garçom.");
+                const data = await response.json();
+                alert(data.detail || "Não foi possível chamar o garçom.");
                 return;
             }
 
             document.getElementById("waiter-card").classList.remove("hidden");
         }
+
+
     </script>
 </body>
 

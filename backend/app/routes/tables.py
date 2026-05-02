@@ -189,6 +189,21 @@ def call_waiter_from_table(table_id: int, db: Session = Depends(get_db)):
     if not table:
         raise HTTPException(status_code=404, detail="Mesa não encontrada")
 
+    # 🔥 verifica se existe comanda aberta
+    open_tabs = db.query(Tab).filter(
+        Tab.is_open == True
+    ).all()
+
+    open_tabs_for_table = [
+        tab for tab in open_tabs if tab_belongs_to_table(tab, table_id)
+    ]
+
+    if not open_tabs_for_table:
+        raise HTTPException(
+            status_code=400,
+            detail="Não é possível chamar o garçom sem comanda aberta"
+        )
+
     table.is_calling_waiter = True
 
     db.commit()
