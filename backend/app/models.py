@@ -13,12 +13,24 @@ class Table(Base):
     tabs = relationship("Tab", back_populates="table")
 
 
+class TableSession(Base):
+    __tablename__ = "table_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    table_id = Column(Integer, ForeignKey("tables.id"))
+    session_token = Column(String, unique=True, index=True)
+    is_active = Column(Boolean, default=True)
+
+    table = relationship("Table")
+
+
 class Tab(Base):
     __tablename__ = "tabs"
 
     id = Column(Integer, primary_key=True, index=True)
 
     table_id = Column(Integer, ForeignKey("tables.id"))
+    session_id = Column(Integer, ForeignKey("table_sessions.id"), nullable=True)
 
     customer_name = Column(String, nullable=False)
     customer_phone = Column(String, nullable=True)

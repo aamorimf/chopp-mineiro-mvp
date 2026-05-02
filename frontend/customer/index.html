@@ -223,6 +223,7 @@
         }
 
         let cart = [];
+        let tableHasOpenTabs = false;
 
         function removeFromCart(productId) {
             cart = cart.filter(item => item.product_id !== productId);
@@ -469,6 +470,13 @@
 
                 const data = await response.json();
                 const tabs = data.tabs || [];
+                tableHasOpenTabs = tabs.length > 0;
+
+                const btn = document.getElementById("call-waiter-btn");
+
+                if (btn) {
+                    btn.style.display = tableHasOpenTabs ? "block" : "none";
+                }
 
                 // Esconde o formulário de abertura inicial para decidir o que mostrar
                 document.getElementById("open-tab-card").classList.add("hidden");
@@ -494,14 +502,12 @@
                 }
             } catch (error) {
                 console.error("Falha ao carregar contexto da mesa:", error);
-            }
+                tableHasOpenTabs = false;
 
-            const hasOpenTabs = data.tabs && data.tabs.length > 0;
-
-            const btn = document.getElementById("call-waiter-btn");
-
-            if (btn) {
-                btn.style.display = hasOpenTabs ? "block" : "none";
+                const btn = document.getElementById("call-waiter-btn");
+                if (btn) {
+                    btn.style.display = "none";
+                }
             }
         }
 
@@ -559,6 +565,8 @@
         }
 
         async function callWaiterFromTable() {
+            if (!tableHasOpenTabs) return;
+
             const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/call-waiter`, {
                 method: "PATCH"
             });

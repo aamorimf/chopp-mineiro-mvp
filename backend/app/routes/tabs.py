@@ -1,8 +1,10 @@
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import Table, Tab
+from app.models import Table, Tab, TableSession
 from app.schemas import TabCreate
 
 router = APIRouter(prefix="/tabs", tags=["Tabs"])
@@ -35,11 +37,30 @@ def create_tab(data: TabCreate, db: Session = Depends(get_db)):
     if data.table_id not in grouped_ids:
         grouped_ids.append(data.table_id)
 
+    session = (
+        db.query(TableSession)
+        .filter(
+            TableSession.table_id == data.table_id,
+            TableSession.is_active == True
+        )
+        .first()
+    )
+
+    if not session:
+        session = TableSession(
+            table_id=data.table_id,
+            session_token=str(uuid4()),
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+
     # LIMPA CHAMADO SEMPRE
     clear_waiter_calls_for_table_ids(grouped_ids, db)
 
     tab = Tab(
         table_id=data.table_id,
+        session_id=session.id,
         customer_name=data.customer_name,
         customer_phone=data.customer_phone,
         observation=data.observation,
@@ -102,6 +123,21 @@ def close_tab(tab_id: int, db: Session = Depends(get_db)):
     
     tab.is_requesting_close = False
     tab.is_closing_confirmed = False
+
+    if tab.session_id:
+        has_open_tabs = (
+            db.query(Tab)
+            .filter(
+                Tab.session_id == tab.session_id,
+                Tab.is_open == True
+            )
+            .first()
+        )
+
+        if not has_open_tabs:
+            session = db.query(TableSession).filter(TableSession.id == tab.session_id).first()
+            if session:
+                session.is_active = False
 
     db.commit()
     db.refresh(tab)
