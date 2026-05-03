@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -8,6 +9,10 @@ from app.models import Table, Tab, TableSession, Order
 from app.schemas import TabCreate
 
 router = APIRouter(prefix="/tabs", tags=["Tabs"])
+
+
+class TableGroupRequest(BaseModel):
+    table_ids: list[int]
 
 
 def get_db():
@@ -22,6 +27,23 @@ def clear_waiter_calls_for_table_ids(table_ids: list[int], db: Session):
 
     for table in tables:
         table.is_calling_waiter = False
+
+
+def get_grouped_table_ids(tab: Tab) -> set[int]:
+    ids = {tab.table_id}
+
+    if tab.grouped_table_ids:
+        ids.update(
+            int(table_id.strip())
+            for table_id in tab.grouped_table_ids.split(",")
+            if table_id.strip().isdigit()
+        )
+
+    return ids
+
+
+def tab_belongs_to_table(tab: Tab, table_id: int) -> bool:
+    return table_id in get_grouped_table_ids(tab)
 
 
 @router.post("/")
@@ -243,6 +265,54 @@ def cancel_tab_close(tab_id: int, db: Session = Depends(get_db)):
     db.refresh(tab)
 
     return {"message": "Encerramento cancelado"}
+
+@router.patch("/{tab_id}/group-tables")
+def group_tables(tab_id: int, data: TableGroupRequest, db: Session = Depends(get_db)):
+    tab = db.query(Tab).filter(Tab.id == tab_id).first()
+
+    if not tab:
+        raise HTTPException(status_code=404, detail="Comanda não encontrada")
+
+    if not tab.is_open:
+        raise HTTPException(status_code=400, detail="Comanda já está fechada")
+
+    requested_ids = set(data.table_ids or [])
+
+    if not requested_ids:
+        raise HTTPException(status_code=400, detail="Nenhuma mesa selecionada")
+
+    tables = db.query(Table).filter(Table.id.in_(requested_ids)).all()
+    found_ids = {table.id for table in tables}
+    missing_ids = requested_ids - found_ids
+
+    if missing_ids:
+        raise HTTPException(status_code=404, detail="Mesa não encontrada")
+
+    grouped_ids = get_grouped_table_ids(tab)
+    new_table_ids = requested_ids - grouped_ids
+
+    all_open_tabs = db.query(Tab).filter(Tab.is_open == True).all()
+
+    for table in tables:
+        if table.id not in new_table_ids:
+            continue
+
+        if table.is_calling_waiter:
+            raise HTTPException(status_code=400, detail="Mesa não está livre")
+
+        for open_tab in all_open_tabs:
+            if open_tab.id == tab.id:
+                continue
+
+            if tab_belongs_to_table(open_tab, table.id):
+                raise HTTPException(status_code=400, detail="Mesa não está livre")
+
+    grouped_ids.update(new_table_ids)
+    tab.grouped_table_ids = ",".join(str(table_id) for table_id in sorted(grouped_ids))
+
+    db.commit()
+
+    return {"message": "Mesas agrupadas com sucesso"}
 
 @router.get("/{tab_id}/status")
 def get_tab_status(tab_id: int, db: Session = Depends(get_db)):

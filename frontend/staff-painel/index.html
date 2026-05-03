@@ -286,6 +286,7 @@
           }
           <p><strong>Atendimento:</strong> ${tab.is_calling_waiter ? "Garçom solicitado" : "Sem chamado"}</p>
           <button onclick="openNewOrder(${tab.tab_id})">Novo pedido</button>
+          <button onclick="openGroupTables(${tab.tab_id}, ${tableId})">Agrupar mesa</button>
           ${tab.is_calling_waiter
             ? `<button onclick="resolveWaiterCall(${tab.tab_id}, ${tableId})">Atendimento realizado</button>`
             : ""
@@ -442,6 +443,68 @@
       await fetch(`http://127.0.0.1:8000/tables/${tableId}/cancel-waiter`, {
         method: "PATCH"
       });
+
+      await openTable(tableId);
+      await loadTables();
+    }
+
+    async function openGroupTables(tabId, tableId) {
+      const response = await fetch("http://127.0.0.1:8000/tables/status/all");
+      const tables = await response.json();
+      const freeTables = tables.filter(table => table.status === "white");
+
+      const body = document.getElementById("modal-body");
+
+      body.innerHTML = `
+        <h3>Agrupar mesa</h3>
+        <div id="free-tables-list"></div>
+        <button onclick="confirmGroupTables(${tabId}, ${tableId})">Confirmar agrupamento</button>
+        <button onclick="openTable(${tableId})">Voltar</button>
+      `;
+
+      const list = document.getElementById("free-tables-list");
+
+      if (freeTables.length === 0) {
+        list.innerHTML = "<p>Nenhuma mesa livre disponível.</p>";
+        return;
+      }
+
+      list.innerHTML = freeTables.map(table => `
+        <label style="display:block; margin-top:8px;">
+          <input
+            type="checkbox"
+            class="free-table-checkbox"
+            value="${table.table_id}"
+          />
+          Mesa ${table.table_number}
+        </label>
+      `).join("");
+    }
+
+    async function confirmGroupTables(tabId, tableId) {
+      const selectedTables = Array.from(document.querySelectorAll(".free-table-checkbox:checked"))
+        .map(input => Number(input.value));
+
+      if (selectedTables.length === 0) {
+        alert("Selecione ao menos uma mesa livre.");
+        return;
+      }
+
+      const response = await fetch(`http://127.0.0.1:8000/tabs/${tabId}/group-tables`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          table_ids: selectedTables
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        alert(data.detail || "Não foi possível agrupar as mesas.");
+        return;
+      }
 
       await openTable(tableId);
       await loadTables();
