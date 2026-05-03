@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Painel do Dono - Chopp do Mineiro</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #fff;
+      margin: 0;
+      padding: 24px;
+    }
+
+    h1 {
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      color: #bbb;
+      margin-top: 0;
+      margin-bottom: 20px;
+    }
+
+    .top-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    button {
+      background: #44d17a;
+      color: #111;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    section {
+      margin-bottom: 28px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .revenue-hero {
+      background: #163322;
+      border: 1px solid #44d17a;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 12px;
+    }
+
+    .revenue-label {
+      color: #aee8c2;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .revenue-value {
+      color: #44d17a;
+      font-size: 48px;
+      font-weight: bold;
+      line-height: 1;
+    }
+
+    .summary-card,
+    .panel {
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .summary-label {
+      color: #bbb;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .summary-value {
+      color: #ffd447;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .list-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid #333;
+    }
+
+    .list-row:last-child {
+      border-bottom: none;
+    }
+
+    .muted {
+      color: #bbb;
+    }
+
+    .strong {
+      font-weight: bold;
+      color: #ffd447;
+    }
+
+    .top-product {
+      background: #2f2a16;
+      border: 1px solid #ffd447;
+      border-radius: 12px;
+      color: #ffd447;
+      font-weight: bold;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="top-actions">
+    <div>
+      <h1>Painel do Dono</h1>
+      <p class="subtitle">Resumo em tempo real do seu bar</p>
+    </div>
+    <button onclick="loadDailySummary()">🔄 Atualizar agora</button>
+  </div>
+
+  <section>
+    <h2>📊 Resumo do Dia</h2>
+    <div id="revenue-hero" class="revenue-hero"></div>
+    <div id="summary-grid" class="summary-grid"></div>
+  </section>
+
+  <section>
+    <h2>🧾 Comandas encerradas</h2>
+    <div id="closed-tabs" class="panel"></div>
+  </section>
+
+  <section>
+    <h2>🔥 Itens mais vendidos</h2>
+    <div id="top-product"></div>
+    <div id="items-sold" class="panel"></div>
+  </section>
+
+  <script>
+    function formatCurrency(value) {
+      return `R$ ${Number(value || 0).toFixed(2)}`;
+    }
+
+    function renderSummary(data) {
+      const revenueHero = document.getElementById("revenue-hero");
+      const grid = document.getElementById("summary-grid");
+
+      revenueHero.innerHTML = `
+        <div class="revenue-label">Total vendido hoje</div>
+        <div class="revenue-value">${formatCurrency(data.total_revenue)}</div>
+      `;
+
+      grid.innerHTML = `
+        <div class="summary-card">
+          <div class="summary-label">Comandas encerradas</div>
+          <div class="summary-value">${data.closed_tabs_count}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Ticket médio</div>
+          <div class="summary-value">${formatCurrency(data.average_ticket)}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Comandas abertas</div>
+          <div class="summary-value">${data.open_tabs_count}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Em fechamento</div>
+          <div class="summary-value">${data.closing_tabs_count}</div>
+        </div>
+      `;
+    }
+
+    function renderClosedTabs(closedTabs) {
+      const container = document.getElementById("closed-tabs");
+
+      if (!closedTabs || closedTabs.length === 0) {
+        container.innerHTML = '<p class="muted">Nenhuma comanda encerrada hoje.</p>';
+        return;
+      }
+
+      container.innerHTML = closedTabs.map(tab => `
+        <div class="list-row">
+          <span>Mesa ${tab.table_number} | ${tab.customer_name}</span>
+          <span class="strong">${formatCurrency(tab.total_amount)}</span>
+        </div>
+      `).join("");
+    }
+
+    function renderItemsSold(itemsSold) {
+      const topProduct = document.getElementById("top-product");
+      const container = document.getElementById("items-sold");
+
+      if (!itemsSold || itemsSold.length === 0) {
+        topProduct.innerHTML = "";
+        container.innerHTML = '<p class="muted">Nenhum item vendido hoje.</p>';
+        return;
+      }
+
+      const firstItem = itemsSold[0];
+      topProduct.innerHTML = `
+        <div class="top-product">
+          🏆 Mais vendido hoje: ${firstItem.product_name} — ${firstItem.quantity_sold} vendas
+        </div>
+      `;
+
+      container.innerHTML = itemsSold.map(item => `
+        <div class="list-row">
+          <span>${item.product_name} <span class="muted">x${item.quantity_sold}</span></span>
+          <span class="strong">${formatCurrency(item.total_amount)}</span>
+        </div>
+      `).join("");
+    }
+
+    async function loadDailySummary() {
+      const response = await fetch("http://127.0.0.1:8000/tabs/daily-summary");
+      const data = await response.json();
+
+      renderSummary(data);
+      renderClosedTabs(data.closed_tabs);
+      renderItemsSold(data.items_sold);
+    }
+
+    loadDailySummary();
+    setInterval(loadDailySummary, 5000);
+  </script>
+</body>
+
+</html>

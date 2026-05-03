@@ -135,11 +135,27 @@
     .blink {
       animation: blink 1s infinite;
     }
+
+    .feedback-toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #44d17a;
+      color: #111;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      font-weight: bold;
+      padding: 12px 18px;
+      z-index: 2000;
+    }
   </style>
 </head>
 
 <body>
   <h1>Painel do Salão</h1>
+
+  <div id="feedback-toast" class="feedback-toast hidden"></div>
 
   <div id="tables-grid" class="grid"></div>
 
@@ -152,6 +168,37 @@
   </div>
 
   <script>
+    const tableSeenAt = {};
+    let feedbackTimer = null;
+
+    function showFeedback(message) {
+      const toast = document.getElementById("feedback-toast");
+      toast.textContent = message;
+      toast.classList.remove("hidden");
+
+      if (feedbackTimer) {
+        clearTimeout(feedbackTimer);
+      }
+
+      feedbackTimer = setTimeout(() => {
+        toast.classList.add("hidden");
+      }, 2000);
+    }
+
+    function getTableTimerText(table) {
+      if (table.status === "white") {
+        delete tableSeenAt[table.table_id];
+        return "";
+      }
+
+      if (!tableSeenAt[table.table_id]) {
+        tableSeenAt[table.table_id] = Date.now();
+      }
+
+      const minutes = Math.floor((Date.now() - tableSeenAt[table.table_id]) / 60000);
+      return ` — ${minutes} min`;
+    }
+
     async function loadTables() {
       const response = await fetch("http://127.0.0.1:8000/tables/status/all");
       const tables = await response.json();
@@ -162,13 +209,14 @@
       tables.forEach(table => {
         const card = document.createElement("div");
         card.className = `table-card ${table.status}`;
+        const timerText = getTableTimerText(table);
 
         if (table.status === "red" && table.attention_type === "close_request") {
           card.classList.add("blink");
         }
 
         card.innerHTML = `
-          <div>Mesa ${table.table_number}</div>
+          <div>Mesa ${table.table_number}${timerText}</div>
           <div class="reason">${table.reason}</div>
           <div class="reason">Comandas abertas: ${table.open_tabs_count}</div>
         `;
@@ -386,7 +434,7 @@
         })
       })
 
-      alert("Pedido enviado")
+      showFeedback("✔ Pedido enviado")
 
       const currentTableId = document.getElementById("modal-title").textContent.replace("Mesa ", "")
       await openTable(Number(currentTableId))
@@ -400,6 +448,7 @@
 
       await openTable(tableId);
       await loadTables();
+      showFeedback("✔ Pedido entregue");
     }
 
     async function cancelOrder(orderId, tableId) {
@@ -431,6 +480,7 @@
 
       await openTable(tableId);
       await loadTables();
+      showFeedback("✔ Comanda encerrada");
     }
 
     async function resolveWaiterCall(tabId, tableId) {
@@ -595,6 +645,7 @@
 
       await openTable(tableId);
       await loadTables();
+      showFeedback("✔ Fechamento confirmado");
     }
 
   </script>

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import Table, Tab, TableSession, Order
+from app.models import Table, Tab, TableSession, Order, Product
 from app.schemas import TabCreate
 
 router = APIRouter(prefix="/tabs", tags=["Tabs"])
@@ -44,6 +44,26 @@ def get_grouped_table_ids(tab: Tab) -> set[int]:
 
 def tab_belongs_to_table(tab: Tab, table_id: int) -> bool:
     return table_id in get_grouped_table_ids(tab)
+
+
+def calculate_tab_total(tab_id: int, db: Session) -> float:
+    orders = (
+        db.query(Order)
+        .filter(
+            Order.tab_id == tab_id,
+            Order.is_cancelled == False
+        )
+        .all()
+    )
+
+    total = 0
+
+    for order in orders:
+        product = db.query(Product).filter(Product.id == order.product_id).first()
+        price = product.price if product else 0
+        total += price * order.quantity
+
+    return float(total)
 
 
 @router.post("/")
@@ -224,6 +244,86 @@ def close_tab(tab_id: int, db: Session = Depends(get_db)):
     db.refresh(tab)
 
     return {"message": "Comanda encerrada"}
+
+
+@router.get("/daily-summary")
+def get_daily_summary(db: Session = Depends(get_db)):
+    closed_tabs = db.query(Tab).filter(Tab.is_open == False).all()
+    open_tabs_count = db.query(Tab).filter(Tab.is_open == True).count()
+    closing_tabs_count = (
+        db.query(Tab)
+        .filter(
+            Tab.is_open == True,
+            Tab.is_closing_confirmed == True
+        )
+        .count()
+    )
+
+    closed_tabs_result = []
+    items_by_product = {}
+    total_revenue = 0
+
+    for tab in closed_tabs:
+        table = db.query(Table).filter(Table.id == tab.table_id).first()
+        total_amount = calculate_tab_total(tab.id, db)
+        total_revenue += total_amount
+
+        orders = (
+            db.query(Order)
+            .filter(
+                Order.tab_id == tab.id,
+                Order.is_cancelled == False
+            )
+            .all()
+        )
+
+        for order in orders:
+            product = db.query(Product).filter(Product.id == order.product_id).first()
+            product_name = product.name if product else "Produto desconhecido"
+            price = product.price if product else 0
+
+            if order.product_id not in items_by_product:
+                items_by_product[order.product_id] = {
+                    "product_id": order.product_id,
+                    "product_name": product_name,
+                    "quantity_sold": 0,
+                    "total_amount": 0,
+                }
+
+            items_by_product[order.product_id]["quantity_sold"] += order.quantity
+            items_by_product[order.product_id]["total_amount"] += price * order.quantity
+
+        closed_tabs_result.append(
+            {
+                "tab_id": tab.id,
+                "table_id": tab.table_id,
+                "table_number": table.number if table else tab.table_id,
+                "customer_name": tab.customer_name,
+                "total_amount": total_amount,
+            }
+        )
+
+    closed_tabs_count = len(closed_tabs_result)
+    average_ticket = total_revenue / closed_tabs_count if closed_tabs_count else 0
+    items_sold = sorted(
+        items_by_product.values(),
+        key=lambda item: item["quantity_sold"],
+        reverse=True
+    )
+
+    for item in items_sold:
+        item["total_amount"] = float(item["total_amount"])
+
+    return {
+        "total_revenue": float(total_revenue),
+        "closed_tabs_count": closed_tabs_count,
+        "average_ticket": float(average_ticket),
+        "open_tabs_count": open_tabs_count,
+        "closing_tabs_count": closing_tabs_count,
+        "closed_tabs": closed_tabs_result,
+        "items_sold": items_sold,
+    }
+
 
 @router.get("/table/{table_id}/open")
 def list_open_tabs_by_table(table_id: int, db: Session = Depends(get_db)):
