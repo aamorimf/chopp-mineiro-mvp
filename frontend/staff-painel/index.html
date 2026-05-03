@@ -180,7 +180,7 @@
     }
 
     async function openTable(tableId) {
-      const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/details`);
+      const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/staff-details`);
       const data = await response.json();
 
       document.getElementById("modal-title").textContent = `Mesa ${data.table_number}`;
@@ -194,6 +194,33 @@
           : ""
         }
         `;
+
+      const sessionLinks = [];
+      const seenSessions = new Set();
+
+      data.tabs.forEach(tab => {
+        if (!tab.session_token || seenSessions.has(tab.session_token)) return;
+
+        seenSessions.add(tab.session_token);
+
+        const sessionTableId = tab.session_table_id || tableId;
+        const url = new URL(
+          `../customer/index.html?table_id=${sessionTableId}&session_token=${encodeURIComponent(tab.session_token)}`,
+          window.location.href
+        ).href;
+
+        sessionLinks.push(`
+          <div class="tab-block">
+            <p><strong>Link da sessão:</strong></p>
+            <p style="word-break: break-all; font-size: 13px;">${url}</p>
+            <button onclick="copySessionLink('${url}')">Copiar link da sessão</button>
+          </div>
+        `);
+      });
+
+      if (sessionLinks.length > 0) {
+        body.innerHTML += sessionLinks.join("");
+      }
 
       if (data.tabs.length === 0) {
         body.innerHTML += "<p>Nenhuma comanda aberta nesta mesa.</p>";
@@ -389,6 +416,11 @@
 
     function closeModal() {
       document.getElementById("modal").classList.add("hidden");
+    }
+
+    async function copySessionLink(url) {
+      await navigator.clipboard.writeText(url);
+      alert("Link da sessão copiado.");
     }
 
     async function closeTab(tabId, tableId) {

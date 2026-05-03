@@ -54,10 +54,10 @@
         <p id="table-label"></p>
 
         <div id="table-home-card" class="card hidden">
-            <h2>Comandas desta mesa</h2>
+            <h2>Seja bem-vindo(a)!</h2>
             <div id="open-tabs-list"></div>
 
-            <button onclick="showMenuOnly()">Ver cardápio</button>
+            <button id="menu-btn" onclick="showMenuOnly()">Ver cardápio</button>
             <button id="call-waiter-btn" onclick="callWaiterFromTable()">Chamar garçom</button>
         </div>
 
@@ -106,37 +106,47 @@
     <script>
         const params = new URLSearchParams(window.location.search);
         const tableId = params.get("table_id") || "1";
+        const initialSessionToken = params.get("session_token");
+        let activeSessionToken = initialSessionToken || null;
+        let currentMode = "PUBLIC";
+        let currentSessionData = null;
+        let products = [];
+        let cart = [];
+        let tableHasOpenTabs = false;
+        let isViewingMenu = false;
 
         async function init() {
             document.getElementById("table-label").textContent = `Mesa ${tableId}`;
+
+            if (!activeSessionToken) {
+                enterPublicMode();
+                return;
+            }
+
+            const tableContext = await loadTableContext();
+
+            if (!tableContext) return;
+
             const savedTabId = localStorage.getItem("current_tab_id");
 
             if (savedTabId) {
-                try {
-                    const response = await fetch(`http://127.0.0.1:8000/tabs/${savedTabId}/status`);
-                    if (response.ok) {
-                        const tab = await response.json();
+                const tab = tableContext.tabs.find(t => Number(t.tab_id) === Number(savedTabId));
 
-                        if (tab.is_open) {
-                            if (tab.is_requesting_close) {
-                                enterClosingMode();
-                            } else {
-                                document.getElementById("open-tab-card").classList.add("hidden");
-                                document.getElementById("my-tab-card").classList.remove("hidden");
-                                loadProducts();
-                                loadMyOrders();
-                            }
-                            startAutoRefresh();
-                            return;
-                        }
+                if (tab) {
+                    if (tab.is_requesting_close) {
+                        enterClosingMode();
+                    } else {
+                        document.getElementById("open-tab-card").classList.add("hidden");
+                        document.getElementById("table-home-card").classList.add("hidden");
+                        document.getElementById("my-tab-card").classList.remove("hidden");
+                        ensureSessionMenuButton();
+                        loadMyOrders();
                     }
-                } catch (error) {
-                    console.error("Erro ao validar comanda salva:", error);
+                    return;
                 }
+
                 localStorage.removeItem("current_tab_id");
             }
-
-            loadTableContext();
         }
 
         init();
@@ -179,29 +189,20 @@
             document.getElementById("success-message").textContent =
                 `Comanda #${tab.id} aberta para ${tab.customer_name}.`;
 
-            loadProducts();
-
             document.getElementById("my-tab-card").classList.remove("hidden");
+            ensureSessionMenuButton();
             loadMyOrders();
         }
 
-        let products = [];
-
-        async function loadProducts(mode = "order") {
+        async function loadProducts(mode = "order", returnLabel = null) {
             document.getElementById("products")?.remove();
             document.querySelectorAll(".menu-warning")?.forEach(e => e.remove());
+            document.getElementById("menu-return-btn")?.remove();
             const response = await fetch("http://127.0.0.1:8000/products/");
             products = await response.json();
 
             const container = document.createElement("div");
             container.id = "products";
-            if (mode === "menu") {
-                const warning = document.createElement("div");
-                warning.className = "card menu-warning";
-                warning.innerHTML = `
-                `;
-                document.querySelector(".container").appendChild(warning);
-            }
 
             products.forEach(product => {
                 const btn = document.createElement("button");
@@ -220,10 +221,15 @@
             });
 
             document.querySelector(".container").appendChild(container);
-        }
 
-        let cart = [];
-        let tableHasOpenTabs = false;
+            if (returnLabel) {
+                const returnButton = document.createElement("button");
+                returnButton.id = "menu-return-btn";
+                returnButton.textContent = returnLabel;
+                returnButton.onclick = returnFromMenu;
+                document.querySelector(".container").appendChild(returnButton);
+            }
+        }
 
         function removeFromCart(productId) {
             cart = cart.filter(item => item.product_id !== productId);
@@ -255,6 +261,172 @@
   `;
         }
 
+        function clearDynamicUi() {
+            document.getElementById("products")?.remove();
+            document.getElementById("menu-return-btn")?.remove();
+            document.getElementById("session-menu-btn")?.remove();
+            document.querySelectorAll(".menu-warning")?.forEach(e => e.remove());
+            document.getElementById("open-tab-card")?.classList.add("hidden");
+            document.getElementById("success-card")?.classList.add("hidden");
+            document.getElementById("my-tab-card")?.classList.add("hidden");
+            document.getElementById("waiter-card")?.classList.add("hidden");
+            document.getElementById("closing-card")?.classList.add("hidden");
+            document.getElementById("closed-card")?.classList.add("hidden");
+            document.getElementById("cart")?.classList.add("hidden");
+        }
+
+        function showPublicHome() {
+            currentMode = "PUBLIC";
+            isViewingMenu = false;
+            currentSessionData = null;
+            tableHasOpenTabs = false;
+
+            clearDynamicUi();
+            localStorage.removeItem("current_tab_id");
+            localStorage.removeItem("current_table_id");
+
+            document.getElementById("table-home-card")?.classList.remove("hidden");
+
+            const list = document.getElementById("open-tabs-list");
+            if (list) {
+                list.innerHTML = "";
+            }
+
+            const menuButton = document.getElementById("menu-btn");
+            if (menuButton) {
+                menuButton.style.display = "block";
+                menuButton.textContent = "Ver cardápio";
+            }
+
+            const waiterButton = document.getElementById("call-waiter-btn");
+            if (waiterButton) {
+                waiterButton.style.display = "none";
+            }
+        }
+
+        async function showPublicMenu() {
+            currentMode = "PUBLIC";
+            isViewingMenu = true;
+            clearDynamicUi();
+            document.getElementById("table-home-card")?.classList.add("hidden");
+            await loadProducts("menu", "Voltar");
+        }
+
+        function showSessionHome(data) {
+            currentMode = "SESSION";
+            isViewingMenu = false;
+            currentSessionData = data;
+
+            clearDynamicUi();
+
+            const tabs = data.tabs || [];
+            tableHasOpenTabs = tabs.length > 0;
+
+            document.getElementById("table-home-card")?.classList.remove("hidden");
+
+            const menuButton = document.getElementById("menu-btn");
+            if (menuButton) {
+                menuButton.style.display = "block";
+                menuButton.textContent = "Ver cardápio";
+            }
+
+            const waiterButton = document.getElementById("call-waiter-btn");
+            if (waiterButton) {
+                waiterButton.style.display = "none";
+            }
+
+            const list = document.getElementById("open-tabs-list");
+            if (!list) return;
+
+            if (tabs.length > 0) {
+                list.innerHTML = `
+                <p>Comandas abertas nesta mesa:</p>
+                ${tabs.map(tab => `
+                    <div class="card" style="border-left: 4px solid #ffd447;">
+                        <p><strong>${tab.customer_name}</strong></p>
+                        <p>Comanda #${tab.tab_id}</p>
+                        <button onclick="enterExistingTab(${tab.tab_id})">Esta é minha comanda</button>
+                    </div>
+                `).join("")}
+            `;
+            } else {
+                list.innerHTML = `Não há comandas abertas`;
+            }
+        }
+
+        async function showSessionMenu() {
+            if (!activeSessionToken) {
+                handleInvalidSession();
+                return;
+            }
+
+            currentMode = "SESSION";
+            isViewingMenu = true;
+            clearDynamicUi();
+            document.getElementById("table-home-card")?.classList.add("hidden");
+            await loadProducts("menu", "Voltar para comanda");
+        }
+
+        function ensureSessionMenuButton() {
+            const card = document.getElementById("my-tab-card");
+            if (!card || document.getElementById("session-menu-btn")) return;
+
+            const button = document.createElement("button");
+            button.id = "session-menu-btn";
+            button.textContent = "Ver cardápio";
+            button.onclick = showMenuOnly;
+
+            card.appendChild(button);
+        }
+
+        async function returnFromMenu() {
+            isViewingMenu = false;
+            document.getElementById("products")?.remove();
+            document.getElementById("menu-return-btn")?.remove();
+
+            if (activeSessionToken && currentMode === "SESSION") {
+                const tabId = localStorage.getItem("current_tab_id");
+
+                if (tabId) {
+                    document.getElementById("table-home-card")?.classList.add("hidden");
+                    document.getElementById("my-tab-card")?.classList.remove("hidden");
+                    ensureSessionMenuButton();
+                    await loadMyOrders();
+                } else if (currentSessionData) {
+                    showSessionHome(currentSessionData);
+                } else {
+                    await loadTableContext();
+                }
+
+                return;
+            }
+
+            showPublicHome();
+        }
+
+        function handleInvalidSession() {
+            isViewingMenu = false;
+            localStorage.removeItem("current_tab_id");
+            activeSessionToken = null;
+            showPublicHome();
+        }
+
+        async function fetchSessionDetails() {
+            if (!activeSessionToken || currentMode === "CLOSED_SESSION") {
+                return null;
+            }
+
+            const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/session-details?session_token=${encodeURIComponent(activeSessionToken)}&t=${Date.now()}`);
+
+            if (!response.ok) {
+                handleInvalidSession();
+                return null;
+            }
+
+            currentSessionData = await response.json();
+            return currentSessionData;
+        }
+
         async function loadMyOrders() {
             console.log("Atlas Debug: Botão Atualizar clicado.");
             const tabId = localStorage.getItem("current_tab_id");
@@ -264,12 +436,27 @@
                 return;
             }
 
+            if (!activeSessionToken) {
+                enterPublicMode();
+                return;
+            }
+
             try {
-                const response = await fetch(`http://127.0.0.1:8000/orders/tab/${tabId}`);
-                const data = await response.json();
-                const orders = data.orders;
-                const total = data.total;
-                const isConfirmed = data.is_closing_confirmed;
+                const data = await fetchSessionDetails();
+                if (!data) return;
+
+                const currentTab = data.tabs.find(t => Number(t.tab_id) === Number(tabId));
+
+                if (!currentTab) {
+                    enterClosedMode();
+                    return;
+                }
+
+                const orders = currentTab.orders || [];
+                const total = orders.reduce((sum, order) => {
+                    return sum + ((order.price || 0) * order.quantity);
+                }, 0);
+                const isConfirmed = currentTab.is_closing_confirmed;
 
                 const container = document.getElementById("my-orders");
                 if (!container) return;
@@ -282,7 +469,7 @@
                 ${orders.map(order => `
                     <p>
                         ${order.product_name} x${order.quantity}
-                        — R$ ${order.subtotal.toFixed(2)}
+                        — R$ ${((order.price || 0) * order.quantity).toFixed(2)}
                     </p>
                 `).join("")}
                 <hr>
@@ -298,22 +485,26 @@
             `).join("");
                 }
 
-                await loadOthersOnTable();
+                await loadOthersOnTable(data);
             } catch (error) {
                 console.error("Atlas Debug: Erro ao carregar pedidos:", error);
             }
         }
 
-        async function loadOthersOnTable() {
+        async function loadOthersOnTable(tableData = null) {
             const currentTabId = localStorage.getItem("current_tab_id");
             const othersContainer = document.getElementById("others-on-table");
 
             if (!othersContainer) return;
 
+            if (!activeSessionToken) {
+                othersContainer.innerHTML = "";
+                return;
+            }
+
             try {
-                // Adicionamos um timestamp para evitar cache do navegador e garantir dado novo
-                const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/details?t=${Date.now()}`);
-                const data = await response.json();
+                const data = tableData || await fetchSessionDetails();
+                if (!data) return;
 
                 // Filtra: string para número para garantir a comparação
                 const others = data.tabs.filter(t => Number(t.tab_id) !== Number(currentTabId));
@@ -322,9 +513,9 @@
                     othersContainer.innerHTML = "<p style='font-size: 0.9em; color: #888;'>Só você está nesta mesa.</p>";
                 } else {
                     othersContainer.innerHTML = others.map(t => `
-                <p style="font-size: 0.9em; background: #333; padding: 10px; border-radius: 8px; margin-bottom: 5px; border-left: 3px solid #ffd447;">
+                <button onclick="enterExistingTab(${t.tab_id})" style="font-size: 0.9em; background: #333; color: #fff; padding: 10px; border-radius: 8px; margin-bottom: 5px; border-left: 3px solid #ffd447; text-align: left; font-weight: normal;">
                     👤 ${t.customer_name} (Comanda #${t.tab_id})
-                </p>
+                </button>
             `).join("");
                 }
             } catch (error) {
@@ -336,6 +527,10 @@
         async function requestCloseTab() {
             const tab_id = localStorage.getItem("current_tab_id");
             if (!tab_id) return;
+            if (!activeSessionToken) {
+                enterPublicMode();
+                return;
+            }
 
             const confirmed = confirm("Deseja encerrar sua comanda e solicitar o pagamento?");
             if (!confirmed) return;
@@ -343,7 +538,13 @@
             try {
                 const response = await fetch(`http://127.0.0.1:8000/tabs/${tab_id}/request-close`, { method: "PATCH" });
                 if (response.ok) {
-                    enterClosingMode();
+                    const tab = await response.json();
+
+                    if (tab.is_open === false) {
+                        enterClosedMode();
+                    } else {
+                        enterClosingMode();
+                    }
                 } else {
                     alert("Erro ao solicitar fechamento no servidor.");
                 }
@@ -358,6 +559,7 @@
 
             document.getElementById("closing-card").classList.remove("hidden");
             document.getElementById("my-tab-card").classList.remove("hidden");
+            ensureSessionMenuButton();
 
             loadMyOrders();
         }
@@ -366,6 +568,10 @@
             const confirmed = confirm("Deseja cancelar o encerramento da comanda?");
 
             if (!confirmed) return;
+            if (!activeSessionToken) {
+                enterPublicMode();
+                return;
+            }
 
             const tabId = localStorage.getItem("current_tab_id");
 
@@ -380,12 +586,16 @@
             document.getElementById("products")?.classList.remove("hidden");
             document.getElementById("cart")?.classList.remove("hidden");
             document.getElementById("my-tab-card")?.classList.remove("hidden");
+            ensureSessionMenuButton();
 
             document.getElementById("closing-card").classList.add("hidden");
         }
 
         function startAutoRefresh() {
             setInterval(async () => {
+                if (isViewingMenu) return;
+                if (!activeSessionToken || currentMode !== "SESSION") return;
+
                 const tabId = localStorage.getItem("current_tab_id");
 
                 if (tabId) {
@@ -402,39 +612,63 @@
 
             if (!tabId) return;
 
-            const response = await fetch(`http://127.0.0.1:8000/tabs/${tabId}/status`);
+            if (!activeSessionToken) {
+                enterPublicMode();
+                return;
+            }
 
-            if (!response.ok) return;
+            const data = await fetchSessionDetails();
+            if (!data) return;
 
-            const tab = await response.json();
+            const tab = data.tabs.find(t => Number(t.tab_id) === Number(tabId));
 
-            if (!tab.is_open) {
+            if (!tab || !tab.is_open) {
                 enterClosedMode();
+                return;
+            }
+
+            const tableIsCallingWaiter = data.is_calling_waiter === true;
+
+            if (tab.is_calling_waiter || tableIsCallingWaiter) {
+                document.getElementById("waiter-card")?.classList.remove("hidden");
+            } else {
+                document.getElementById("waiter-card")?.classList.add("hidden");
             }
         }
 
         function enterClosedMode() {
+            currentMode = "CLOSED_SESSION";
+            isViewingMenu = false;
+            activeSessionToken = null;
             document.getElementById("open-tab-card")?.classList.add("hidden");
             document.getElementById("success-card")?.classList.add("hidden");
-            document.getElementById("products")?.classList.add("hidden");
+            document.getElementById("products")?.remove();
+            document.getElementById("menu-return-btn")?.remove();
+            document.getElementById("session-menu-btn")?.remove();
             document.getElementById("cart")?.classList.add("hidden");
             document.getElementById("my-tab-card")?.classList.add("hidden");
             document.getElementById("closing-card")?.classList.add("hidden");
+            document.getElementById("waiter-card")?.classList.add("hidden");
+            document.getElementById("table-home-card")?.classList.add("hidden");
 
             document.getElementById("closed-card").classList.remove("hidden");
 
-            localStorage.removeItem("current_tab_id");
-            localStorage.removeItem("current_table_id");
-
             setTimeout(() => {
-                location.reload();
-            }, 3000);
+                localStorage.removeItem("current_tab_id");
+                localStorage.removeItem("current_table_id");
+                activeSessionToken = null;
+                window.location.href = `${window.location.pathname}?table_id=${encodeURIComponent(tableId)}`;
+            }, 20000);
         }
 
         async function callWaiter() {
             const tabId = localStorage.getItem("current_tab_id");
 
             if (!tabId) return;
+            if (!activeSessionToken) {
+                enterPublicMode();
+                return;
+            }
 
             await fetch(`http://127.0.0.1:8000/tabs/${tabId}/call-waiter`, {
                 method: "PATCH"
@@ -447,6 +681,10 @@
             const confirmed = confirm("Deseja cancelar o chamado do garçom?");
 
             if (!confirmed) return;
+            if (!activeSessionToken) {
+                enterPublicMode();
+                return;
+            }
 
             const tabId = localStorage.getItem("current_tab_id");
 
@@ -463,51 +701,27 @@
             document.getElementById("waiter-card").classList.add("hidden");
         }
 
+        function enterPublicMode() {
+            showPublicHome();
+        }
+
         async function loadTableContext() {
+            if (!activeSessionToken) {
+                enterPublicMode();
+                return null;
+            }
+
             try {
-                const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/details`);
-                if (!response.ok) throw new Error("Erro ao carregar mesa");
+                const data = await fetchSessionDetails();
+                if (!data) return null;
 
-                const data = await response.json();
-                const tabs = data.tabs || [];
-                tableHasOpenTabs = tabs.length > 0;
-
-                const btn = document.getElementById("call-waiter-btn");
-
-                if (btn) {
-                    btn.style.display = tableHasOpenTabs ? "block" : "none";
-                }
-
-                // Esconde o formulário de abertura inicial para decidir o que mostrar
-                document.getElementById("open-tab-card").classList.add("hidden");
-                document.getElementById("table-home-card").classList.remove("hidden");
-
-                const list = document.getElementById("open-tabs-list");
-
-                if (tabs.length > 0) {
-                    // Se houver comandas na mesa, mostra a lista para o novo cliente decidir
-                    list.innerHTML = `
-                <p>Comandas abertas nesta mesa:</p>
-                ${tabs.map(tab => `
-                    <div class="card" style="border-left: 4px solid #ffd447;">
-                        <p><strong>${tab.customer_name}</strong></p>
-                        <p>Comanda #${tab.tab_id}</p>
-                        <button onclick="enterExistingTab(${tab.tab_id})">Esta é minha comanda</button>
-                    </div>
-                `).join("")}
-            `;
-                } else {
-                    // Mesa totalmente vazia
-                    list.innerHTML = `<p>Mesa livre. Seja bem-vindo!</p>`;
-                }
+                showSessionHome(data);
+                return data;
             } catch (error) {
                 console.error("Falha ao carregar contexto da mesa:", error);
-                tableHasOpenTabs = false;
+                handleInvalidSession();
 
-                const btn = document.getElementById("call-waiter-btn");
-                if (btn) {
-                    btn.style.display = "none";
-                }
+                return null;
             }
         }
 
@@ -527,13 +741,18 @@
         }
 
         function enterExistingTab(tabId) {
+            if (!activeSessionToken) {
+                enterPublicMode();
+                return;
+            }
+
             localStorage.setItem("current_tab_id", tabId);
             localStorage.setItem("current_table_id", tableId);
 
             document.getElementById("table-home-card").classList.add("hidden");
             document.getElementById("my-tab-card").classList.remove("hidden");
+            ensureSessionMenuButton();
 
-            loadProducts();
             loadMyOrders();
         }
 
@@ -554,17 +773,19 @@
         }
 
         function showMenuOnly() {
-            localStorage.removeItem("current_tab_id");
-            localStorage.removeItem("current_table_id");
-
-            document.getElementById("table-home-card").classList.add("hidden");
-            document.getElementById("open-tab-card").classList.add("hidden");
-            document.getElementById("my-tab-card").classList.add("hidden");
-
-            loadProducts("menu");
+            if (activeSessionToken && currentMode === "SESSION") {
+                showSessionMenu();
+            } else {
+                showPublicMenu();
+            }
         }
 
         async function callWaiterFromTable() {
+            if (!activeSessionToken) {
+                enterPublicMode();
+                return;
+            }
+
             if (!tableHasOpenTabs) return;
 
             const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/call-waiter`, {
