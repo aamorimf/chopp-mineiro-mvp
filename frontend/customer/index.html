@@ -45,10 +45,27 @@
         .hidden {
             display: none;
         }
+        .api-debug-badge {
+            position: fixed;
+            right: 10px;
+            bottom: 10px;
+            max-width: min(360px, calc(100vw - 20px));
+            background: rgba(0, 0, 0, 0.78);
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-size: 11px;
+            line-height: 1.3;
+            z-index: 9999;
+            word-break: break-all;
+            opacity: 0.85;
+        }
     </style>
 </head>
 
 <body>
+    <div id="api-debug-badge" class="api-debug-badge"></div>
     <div class="container">
         <h1>Chopp do Mineiro</h1>
         <p id="table-label"></p>
@@ -103,7 +120,11 @@
         </div>
     </div>
 
+    <script src="../config.js"></script>
+    <script src="../api.js"></script>
     <script>
+        document.getElementById("api-debug-badge").textContent = `API: ${window.API_BASE_URL}`;
+
         const params = new URLSearchParams(window.location.search);
         const tableId = params.get("table_id") || "1";
         const initialSessionToken = params.get("session_token");
@@ -162,17 +183,24 @@
                 return;
             }
 
-            const response = await fetch("http://127.0.0.1:8000/tabs/", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    table_id: Number(tableId),
-                    customer_name: customerName,
-                    customer_phone: customerPhone || null
-                })
-            });
+            let response;
+
+            try {
+                response = await apiFetch("/tabs/", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        table_id: Number(tableId),
+                        customer_name: customerName,
+                        customer_phone: customerPhone || null
+                    })
+                });
+            } catch (error) {
+                alert(`Erro ao abrir comanda: ${error.message}`);
+                return;
+            }
 
             if (!response.ok) {
                 alert("Não foi possível abrir a comanda.");
@@ -198,8 +226,13 @@
             document.getElementById("products")?.remove();
             document.querySelectorAll(".menu-warning")?.forEach(e => e.remove());
             document.getElementById("menu-return-btn")?.remove();
-            const response = await fetch("http://127.0.0.1:8000/products/");
-            products = await response.json();
+            try {
+                const response = await apiFetch("/products/");
+                products = await response.json();
+            } catch (error) {
+                alert(`Erro ao carregar cardápio: ${error.message}`);
+                return;
+            }
 
             const container = document.createElement("div");
             container.id = "products";
@@ -416,7 +449,7 @@
                 return null;
             }
 
-            const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/session-details?session_token=${encodeURIComponent(activeSessionToken)}&t=${Date.now()}`);
+            const response = await apiFetch(`/tables/${tableId}/session-details?session_token=${encodeURIComponent(activeSessionToken)}&t=${Date.now()}`);
 
             if (!response.ok) {
                 handleInvalidSession();
@@ -488,6 +521,7 @@
                 await loadOthersOnTable(data);
             } catch (error) {
                 console.error("Atlas Debug: Erro ao carregar pedidos:", error);
+                document.getElementById("my-orders").innerHTML = `<p>Erro ao carregar pedidos: ${error.message}</p>`;
             }
         }
 
@@ -536,7 +570,7 @@
             if (!confirmed) return;
 
             try {
-                const response = await fetch(`http://127.0.0.1:8000/tabs/${tab_id}/request-close`, { method: "PATCH" });
+                const response = await apiFetch(`/tabs/${tab_id}/request-close`, { method: "PATCH" });
                 if (response.ok) {
                     const tab = await response.json();
 
@@ -550,6 +584,7 @@
                 }
             } catch (error) {
                 console.error("Erro na requisição de fechamento:", error);
+                alert(`Erro ao solicitar fechamento: ${error.message}`);
             }
         }
 
@@ -575,9 +610,14 @@
 
             const tabId = localStorage.getItem("current_tab_id");
 
-            await fetch(`http://127.0.0.1:8000/tabs/${tabId}/cancel-close`, {
-                method: "PATCH"
-            });
+            try {
+                await apiFetch(`/tabs/${tabId}/cancel-close`, {
+                    method: "PATCH"
+                });
+            } catch (error) {
+                alert(`Erro ao cancelar fechamento: ${error.message}`);
+                return;
+            }
 
             exitClosingMode();
         }
@@ -598,11 +638,15 @@
 
                 const tabId = localStorage.getItem("current_tab_id");
 
-                if (tabId) {
-                    await checkTabStatus();
-                    await loadMyOrders();
-                } else {
-                    await loadTableContext();
+                try {
+                    if (tabId) {
+                        await checkTabStatus();
+                        await loadMyOrders();
+                    } else {
+                        await loadTableContext();
+                    }
+                } catch (error) {
+                    console.error("Erro ao atualizar mesa:", error);
                 }
             }, 3000);
         }
@@ -657,7 +701,13 @@
                 localStorage.removeItem("current_tab_id");
                 localStorage.removeItem("current_table_id");
                 activeSessionToken = null;
-                window.location.href = `${window.location.pathname}?table_id=${encodeURIComponent(tableId)}`;
+                const redirectParams = new URLSearchParams({ table_id: tableId });
+
+                if (params.get("api_base_url")) {
+                    redirectParams.set("api_base_url", window.API_BASE_URL);
+                }
+
+                window.location.href = `${window.location.pathname}?${redirectParams.toString()}`;
             }, 20000);
         }
 
@@ -670,9 +720,14 @@
                 return;
             }
 
-            await fetch(`http://127.0.0.1:8000/tabs/${tabId}/call-waiter`, {
-                method: "PATCH"
-            });
+            try {
+                await apiFetch(`/tabs/${tabId}/call-waiter`, {
+                    method: "PATCH"
+                });
+            } catch (error) {
+                alert(`Erro ao chamar garçom: ${error.message}`);
+                return;
+            }
 
             document.getElementById("waiter-card").classList.remove("hidden");
         }
@@ -688,14 +743,19 @@
 
             const tabId = localStorage.getItem("current_tab_id");
 
-            if (tabId) {
-                await fetch(`http://127.0.0.1:8000/tabs/${tabId}/cancel-waiter`, {
-                    method: "PATCH"
-                });
-            } else {
-                await fetch(`http://127.0.0.1:8000/tables/${tableId}/cancel-waiter`, {
-                    method: "PATCH"
-                });
+            try {
+                if (tabId) {
+                    await apiFetch(`/tabs/${tabId}/cancel-waiter`, {
+                        method: "PATCH"
+                    });
+                } else {
+                    await apiFetch(`/tables/${tableId}/cancel-waiter`, {
+                        method: "PATCH"
+                    });
+                }
+            } catch (error) {
+                alert(`Erro ao cancelar chamado: ${error.message}`);
+                return;
             }
 
             document.getElementById("waiter-card").classList.add("hidden");
@@ -788,9 +848,16 @@
 
             if (!tableHasOpenTabs) return;
 
-            const response = await fetch(`http://127.0.0.1:8000/tables/${tableId}/call-waiter`, {
+            let response;
+
+            try {
+                response = await apiFetch(`/tables/${tableId}/call-waiter`, {
                 method: "PATCH"
-            });
+                });
+            } catch (error) {
+                alert(error.message);
+                return;
+            }
 
             if (!response.ok) {
                 const data = await response.json();

@@ -124,10 +124,27 @@
       padding: 14px 16px;
       margin-bottom: 12px;
     }
+    .api-debug-badge {
+      position: fixed;
+      right: 10px;
+      bottom: 10px;
+      max-width: min(360px, calc(100vw - 20px));
+      background: rgba(0, 0, 0, 0.78);
+      color: #fff;
+      border: 1px solid #555;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 11px;
+      line-height: 1.3;
+      z-index: 9999;
+      word-break: break-all;
+      opacity: 0.85;
+    }
   </style>
 </head>
 
 <body>
+  <div id="api-debug-badge" class="api-debug-badge"></div>
   <div class="top-actions">
     <div>
       <h1>Painel do Dono</h1>
@@ -152,7 +169,11 @@
     <div id="items-sold" class="panel"></div>
   </section>
 
+  <script src="../config.js"></script>
+  <script src="../api.js"></script>
   <script>
+    document.getElementById("api-debug-badge").textContent = `API: ${window.API_BASE_URL}`;
+
     function formatCurrency(value) {
       return `R$ ${Number(value || 0).toFixed(2)}`;
     }
@@ -228,8 +249,18 @@
     }
 
     async function loadDailySummary() {
-      const response = await fetch("http://127.0.0.1:8000/tabs/daily-summary");
-      const data = await response.json();
+      let data;
+
+      try {
+        const response = await apiFetch("/tabs/daily-summary");
+        data = await response.json();
+      } catch (error) {
+        document.getElementById("revenue-hero").innerHTML = `<p>Erro ao carregar painel: ${error.message}</p>`;
+        document.getElementById("summary-grid").innerHTML = "";
+        document.getElementById("closed-tabs").innerHTML = "";
+        document.getElementById("items-sold").innerHTML = "";
+        return;
+      }
 
       renderSummary(data);
       renderClosedTabs(data.closed_tabs);
