@@ -1,6 +1,5 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/backend/venv/Scripts/python.exe",
-  "python.analysis.typeCheckingMode": "basic",
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/Scripts/python.exe",  "python.analysis.typeCheckingMode": "off",
   "python.analysis.autoImportCompletions": true,
 
   "editor.formatOnSave": true,
@@ -20,5 +19,6 @@
     "*.js": "javascript"
   },
 
-  "terminal.integrated.defaultProfile.windows": "PowerShell"
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "python.analysis.diagnosticMode": "workspace"
 }

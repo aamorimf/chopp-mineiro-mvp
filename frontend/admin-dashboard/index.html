@@ -3,15 +3,22 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel do Dono - Chopp do Mineiro</title>
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       font-family: Arial, sans-serif;
       background: #111;
       color: #fff;
       margin: 0;
       padding: 24px;
+      line-height: 1.45;
+      overflow-x: hidden;
     }
 
     h1 {
@@ -100,6 +107,7 @@
       gap: 12px;
       padding: 10px 0;
       border-bottom: 1px solid #333;
+      overflow-wrap: anywhere;
     }
 
     .list-row:last-child {
@@ -139,6 +147,37 @@
       z-index: 9999;
       word-break: break-all;
       opacity: 0.85;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 16px;
+      }
+
+      .top-actions {
+        align-items: flex-start;
+      }
+
+      .revenue-value {
+        font-size: 36px;
+      }
+
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .list-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      button {
+        min-height: 44px;
+      }
+
+      .api-debug-badge {
+        font-size: 10px;
+      }
     }
   </style>
 </head>

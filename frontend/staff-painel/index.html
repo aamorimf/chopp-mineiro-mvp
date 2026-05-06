@@ -3,15 +3,22 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel - Chopp do Mineiro</title>
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       font-family: Arial, sans-serif;
       background: #111;
       color: #fff;
       margin: 0;
       padding: 24px;
+      line-height: 1.45;
+      overflow-x: hidden;
     }
 
     h1 {
@@ -24,6 +31,36 @@
       gap: 16px;
     }
 
+    button,
+    input,
+    textarea {
+      font: inherit;
+      max-width: 100%;
+    }
+
+    button {
+      min-height: 44px;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin: 6px 6px 6px 0;
+      background: #ffd447;
+      color: #111;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 8px 0 12px;
+      background: #f5f5f5;
+      color: #111;
+    }
+
     .table-card {
       border-radius: 12px;
       padding: 20px;
@@ -31,6 +68,7 @@
       font-weight: bold;
       cursor: pointer;
       min-height: 100px;
+      overflow-wrap: anywhere;
     }
 
     .white {
@@ -63,6 +101,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 16px;
     }
 
     .hidden {
@@ -73,7 +112,7 @@
       background: #222;
       color: #fff;
       width: min(640px, 90vw);
-      max-height: 80vh;
+      max-height: min(82vh, 760px);
       overflow-y: auto;
       border-radius: 16px;
       padding: 24px;
@@ -96,6 +135,94 @@
       border-radius: 12px;
       padding: 16px;
       margin-top: 16px;
+      overflow: hidden;
+    }
+
+    .session-access-card {
+      background: #1b1b1b;
+      border-color: #ffd447;
+    }
+
+    .session-access-title {
+      color: #ffd447;
+      font-weight: bold;
+      margin: 0 0 12px;
+    }
+
+    .session-url {
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #ddd;
+      font-size: 13px;
+      margin: 10px 0 14px;
+      max-height: 92px;
+      overflow-y: auto;
+      padding: 10px;
+      word-break: break-all;
+    }
+
+    .qr-wrap {
+      align-items: center;
+      display: flex;
+      justify-content: center;
+      margin: 14px 0;
+    }
+
+    .qr-code {
+      background: #fff;
+      border-radius: 8px;
+      display: block;
+      height: 280px;
+      max-width: 100%;
+      padding: 8px;
+      width: 280px;
+    }
+
+    .session-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .session-actions button {
+      margin: 0;
+    }
+
+    .session-warning {
+      color: #ffd447;
+      margin: 0;
+    }
+
+    .group-list {
+      display: grid;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .group-row {
+      align-items: center;
+      background: #1b1b1b;
+      border: 1px solid #444;
+      border-radius: 8px;
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      padding: 10px 12px;
+    }
+
+    .group-row label {
+      align-items: center;
+      cursor: pointer;
+      display: flex;
+      gap: 10px;
+      margin: 0;
+      width: 100%;
+    }
+
+    .group-row input {
+      margin: 0;
+      width: auto;
     }
 
     .order-row {
@@ -104,6 +231,8 @@
       gap: 12px;
       padding: 8px 0;
       border-bottom: 1px solid #333;
+      align-items: center;
+      flex-wrap: wrap;
     }
 
     .order-row:last-child {
@@ -165,6 +294,69 @@
       word-break: break-all;
       opacity: 0.85;
     }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 16px;
+      }
+
+      h1 {
+        font-size: 26px;
+        margin-bottom: 16px;
+      }
+
+      .grid {
+        grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+        gap: 12px;
+      }
+
+      .table-card {
+        min-height: 92px;
+        padding: 16px;
+      }
+
+      .modal {
+        align-items: flex-start;
+        padding: 10px;
+      }
+
+      .modal-content {
+        border-radius: 12px;
+        max-height: calc(100vh - 20px);
+        padding: 20px 16px;
+        width: 100%;
+      }
+
+      .close-button {
+        min-height: 40px;
+        min-width: 40px;
+        padding: 0;
+      }
+
+      .tab-block {
+        padding: 14px;
+        margin-top: 14px;
+      }
+
+      .order-row {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      button {
+        margin-right: 0;
+        width: 100%;
+      }
+
+      .session-actions {
+        flex-direction: column;
+      }
+
+      .api-debug-badge {
+        font-size: 10px;
+      }
+    }
   </style>
 </head>
 
@@ -191,6 +383,9 @@
 
     const tableSeenAt = {};
     let feedbackTimer = null;
+    let currentModalTableId = null;
+    let latestTableStatuses = [];
+    let frontendOnlyTableGroups = [];
 
     function showFeedback(message) {
       const toast = document.getElementById("feedback-toast");
@@ -220,21 +415,182 @@
       return ` — ${minutes} min`;
     }
 
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function buildCustomerSessionUrl(tab, fallbackTableId) {
+      if (!tab || !tab.session_token) {
+        return null;
+      }
+
+      const sessionTableId = tab.session_table_id || fallbackTableId;
+
+      if (!sessionTableId || !window.API_BASE_URL) {
+        return null;
+      }
+
+      return new URL(
+        `../customer/index.html?table_id=${sessionTableId}&session_token=${encodeURIComponent(tab.session_token)}&api_base_url=${encodeURIComponent(window.API_BASE_URL)}`,
+        window.location.href
+      ).href;
+    }
+
+    function buildQrCodeUrl(customerUrl) {
+      return `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(customerUrl)}`;
+    }
+
+    function formatGroupedTables(currentTableNumber, groupedTableNumbers = []) {
+      const group = groupedTableNumbers
+        .map(Number)
+        .filter(number => number && number !== Number(currentTableNumber));
+
+      if (group.length === 0) {
+        return `Mesa ${currentTableNumber}`;
+      }
+
+      return `Mesa ${currentTableNumber} • Grupo com ${group.join(", ")}`;
+    }
+
+    function getGroupedTableIdsFromData(data) {
+      return (data.grouped_table_ids || []).map(Number).filter(Boolean);
+    }
+
+    function normalizeTableIds(ids) {
+      return [...new Set(ids.map(Number).filter(Boolean))].sort((a, b) => a - b);
+    }
+
+    function getTableNumberFromStatuses(tableId, tables = latestTableStatuses) {
+      const table = tables.find(item => Number(item.table_id) === Number(tableId));
+      return table ? Number(table.table_number) : Number(tableId);
+    }
+
+    function findFrontendOnlyGroup(tableId) {
+      return frontendOnlyTableGroups.find(group => group.includes(Number(tableId))) || [Number(tableId)];
+    }
+
+    function getMergedGroupIdsForTable(table, tables = latestTableStatuses) {
+      const backendIds = normalizeTableIds(table.grouped_table_ids || [table.table_id]);
+      const frontendIds = normalizeTableIds(findFrontendOnlyGroup(table.table_id));
+
+      if (backendIds.length > 1 && frontendIds.length > 1) {
+        return normalizeTableIds([...backendIds, ...frontendIds]);
+      }
+
+      if (backendIds.length > 1) {
+        return backendIds;
+      }
+
+      if (frontendIds.length > 1) {
+        return frontendIds;
+      }
+
+      return normalizeTableIds([table.table_id]);
+    }
+
+    function getGroupNumbersFromIds(groupIds, tables = latestTableStatuses) {
+      return normalizeTableIds(groupIds)
+        .map(tableId => getTableNumberFromStatuses(tableId, tables))
+        .sort((a, b) => a - b);
+    }
+
+    function applyFrontendGroupsToTables(tables) {
+      return tables.map(table => {
+        const groupIds = getMergedGroupIdsForTable(table, tables);
+
+        return {
+          ...table,
+          grouped_table_ids: groupIds,
+          grouped_table_numbers: getGroupNumbersFromIds(groupIds, tables),
+        };
+      });
+    }
+
+    function applyFrontendGroupToDetails(data) {
+      const statusTable = latestTableStatuses.find(table => Number(table.table_id) === Number(data.table_id));
+      const groupIds = getMergedGroupIdsForTable(statusTable || data, latestTableStatuses);
+
+      return {
+        ...data,
+        grouped_table_ids: groupIds,
+        grouped_table_numbers: getGroupNumbersFromIds(groupIds, latestTableStatuses),
+      };
+    }
+
+    function setFrontendOnlyGroup(tableIds) {
+      const groupIds = normalizeTableIds(tableIds);
+
+      if (groupIds.length <= 1) {
+        return;
+      }
+
+      const mergedIds = normalizeTableIds([
+        ...groupIds,
+        ...frontendOnlyTableGroups
+          .filter(group => group.some(tableId => groupIds.includes(tableId)))
+          .flat(),
+      ]);
+
+      frontendOnlyTableGroups = [
+        ...frontendOnlyTableGroups.filter(group => !group.some(tableId => mergedIds.includes(tableId))),
+        mergedIds,
+      ];
+    }
+
+    function removeFrontendOnlyGroupMembers(tableIds) {
+      const ids = normalizeTableIds(tableIds);
+      frontendOnlyTableGroups = frontendOnlyTableGroups
+        .map(group => group.filter(tableId => !ids.includes(tableId)))
+        .filter(group => group.length > 1);
+    }
+
+    function removeFrontendOnlyGroupedTable(tableId, groupedTableId) {
+      const currentGroup = findFrontendOnlyGroup(tableId);
+      const remainingGroup = currentGroup.filter(id => Number(id) !== Number(groupedTableId));
+
+      removeFrontendOnlyGroupMembers(currentGroup);
+
+      if (remainingGroup.length > 1) {
+        setFrontendOnlyGroup(remainingGroup);
+      }
+    }
+
+    function getBackendGroupIdsForTable(tableId, tables = latestTableStatuses) {
+      const table = tables.find(item => Number(item.table_id) === Number(tableId));
+      return normalizeTableIds(table ? table.grouped_table_ids || [table.table_id] : [tableId]);
+    }
+
+    function findGroupBackendAnchor(groupIds, tables = latestTableStatuses) {
+      const groupSet = new Set(normalizeTableIds(groupIds));
+      const table = tables.find(item =>
+        groupSet.has(Number(item.table_id)) && Number(item.open_tabs_count || 0) > 0
+      );
+
+      return table ? Number(table.table_id) : null;
+    }
+
     async function loadTables() {
       let tables = [];
 
       try {
         const response = await apiFetch("/tables/status/all");
         tables = await response.json();
+        latestTableStatuses = tables;
       } catch (error) {
         document.getElementById("tables-grid").innerHTML = `<p>Erro ao carregar mesas: ${error.message}</p>`;
         return;
       }
 
+      const renderedTables = applyFrontendGroupsToTables(tables);
       const grid = document.getElementById("tables-grid");
       grid.innerHTML = "";
 
-      tables.forEach(table => {
+      renderedTables.forEach(table => {
         const card = document.createElement("div");
         card.className = `table-card ${table.status}`;
         const timerText = getTableTimerText(table);
@@ -244,7 +600,7 @@
         }
 
         card.innerHTML = `
-          <div>Mesa ${table.table_number}${timerText}</div>
+          <div>${formatGroupedTables(table.table_number, table.grouped_table_numbers)}${timerText}</div>
           <div class="reason">${table.reason}</div>
           <div class="reason">Comandas abertas: ${table.open_tabs_count}</div>
         `;
@@ -266,12 +622,15 @@
         return;
       }
 
-      document.getElementById("modal-title").textContent = `Mesa ${data.table_number}`;
+      data = applyFrontendGroupToDetails(data);
+      currentModalTableId = tableId;
+      document.getElementById("modal-title").textContent = formatGroupedTables(data.table_number, data.grouped_table_numbers);
 
       const body = document.getElementById("modal-body");
       body.innerHTML = "";
       body.innerHTML = `
           <button onclick="openCreateTabForm(${tableId})">Abrir nova comanda</button>
+          <button onclick="openGroupTables(${tableId})">Agrupar mesas</button>
           ${data.is_calling_waiter
           ? `<button onclick="resolveTableWaiterCall(${tableId})">Atendimento realizado</button>`
           : ""
@@ -282,21 +641,45 @@
       const seenSessions = new Set();
 
       data.tabs.forEach(tab => {
-        if (!tab.session_token || seenSessions.has(tab.session_token)) return;
+        if (!tab.session_token) {
+          sessionLinks.push(`
+          <div class="tab-block session-access-card">
+            <p class="session-warning">Link do cliente indispon&iacute;vel para a comanda #${tab.tab_id}.</p>
+          </div>
+        `);
+          return;
+        }
+
+        if (seenSessions.has(tab.session_token)) return;
 
         seenSessions.add(tab.session_token);
 
-        const sessionTableId = tab.session_table_id || tableId;
-        const url = new URL(
-          `../customer/index.html?table_id=${sessionTableId}&session_token=${encodeURIComponent(tab.session_token)}&api_base_url=${encodeURIComponent(window.API_BASE_URL)}`,
-          window.location.href
-        ).href;
+        const url = buildCustomerSessionUrl(tab, tableId);
+
+        if (!url) {
+          sessionLinks.push(`
+          <div class="tab-block session-access-card">
+            <p class="session-warning">N&atilde;o foi poss&iacute;vel gerar o link do cliente para a comanda #${tab.tab_id}.</p>
+          </div>
+        `);
+          return;
+        }
+
+        const encodedUrl = encodeURIComponent(url);
+        const qrUrl = buildQrCodeUrl(url);
 
         sessionLinks.push(`
-          <div class="tab-block">
+          <div class="tab-block session-access-card">
+            <p class="session-access-title">Aponte a c&acirc;mera para acompanhar a comanda em tempo real</p>
+            <div class="qr-wrap">
+              <img class="qr-code" src="${escapeHtml(qrUrl)}" alt="QR Code da comanda" width="280" height="280" loading="lazy">
+            </div>
             <p><strong>Link da sessão:</strong></p>
-            <p style="word-break: break-all; font-size: 13px;">${url}</p>
-            <button onclick="copySessionLink('${url}')">Copiar link da sessão</button>
+            <div class="session-url">${escapeHtml(url)}</div>
+            <div class="session-actions">
+              <button onclick="copySessionLinkFromEncoded('${encodedUrl}')">Copiar link</button>
+              <button onclick="openCustomerViewFromEncoded('${encodedUrl}')">Abrir visualiza&ccedil;&atilde;o do cliente</button>
+            </div>
           </div>
         `);
       });
@@ -315,6 +698,7 @@
 
         let ordersHtml = "";
         let total = 0;
+        const isClosingFlow = tab.is_requesting_close || tab.is_closing_confirmed;
 
         if (tab.orders.length === 0) {
           ordersHtml = "<p>Nenhum pedido nesta comanda.</p>";
@@ -327,7 +711,7 @@
             return `
               <div class="order-row">
                 <span>${order.product_name} x${order.quantity}</span>
-                ${tab.is_closing_confirmed
+                ${isClosingFlow
                 ? `<span>R$ ${(price * order.quantity).toFixed(2)}</span>`
                 : ""
               }
@@ -341,35 +725,45 @@
               </div>
             `;
           }).join("");
-
-          if (tab.is_closing_confirmed) {
-            ordersHtml += `<hr><strong>Total: R$ ${total.toFixed(2)}</strong>`;
-          }
         }
+
+        if (isClosingFlow) {
+          ordersHtml += `<hr><strong>Total: R$ ${total.toFixed(2)}</strong>`;
+        }
+
+        const closeActionsHtml = `
+          ${!tab.is_requesting_close && !tab.is_closing_confirmed
+            ? `<button onclick="requestCloseFromStaff(${tab.tab_id}, ${tableId})">Pedir conta</button>`
+            : ""
+          }
+          ${tab.is_requesting_close && !tab.is_closing_confirmed
+            ? `<button onclick="confirmClose(${tab.tab_id}, ${tableId})">Confirmar conta</button>`
+            : ""
+          }
+          ${tab.is_requesting_close || tab.is_closing_confirmed
+            ? `<button onclick="cancelClose(${tab.tab_id}, ${tableId})">Cancelar fechamento</button>`
+            : ""
+          }
+          ${tab.is_closing_confirmed
+            ? `<button onclick="closeTab(${tab.tab_id}, ${tableId})">Finalizar comanda</button>`
+            : ""
+          }
+        `;
 
         tabBlock.innerHTML = `
           <h3>Comanda #${tab.tab_id}</h3>
           <p><strong>Cliente:</strong> ${tab.customer_name}</p>
           <p><strong>Observação:</strong> ${tab.observation || "Sem observação"}</p>
-          <p><strong>Mesas agrupadas:</strong> ${tab.grouped_table_ids || data.table_number}</p>
+          <p><strong>Mesas agrupadas:</strong> ${formatGroupedTables(data.table_number, data.grouped_table_numbers)}</p>
           <p><strong>Fechamento:</strong> ${tab.is_closing_confirmed
             ? "Confirmado"
             : tab.is_requesting_close
               ? "Solicitado"
               : "Não solicitado"
           }</p>
-          ${tab.is_requesting_close && !tab.is_closing_confirmed
-            ? `<button onclick="confirmClose(${tab.tab_id}, ${tableId})">Fechar comanda</button>`
-            : ""
-          }
-
-          ${tab.is_closing_confirmed
-            ? `<button onclick="closeTab(${tab.tab_id}, ${tableId})">Confirmar pagamento e encerrar</button>`
-            : ""
-          }
+          ${closeActionsHtml}
           <p><strong>Atendimento:</strong> ${tab.is_calling_waiter ? "Garçom solicitado" : "Sem chamado"}</p>
           <button onclick="openNewOrder(${tab.tab_id})">Novo pedido</button>
-          <button onclick="openGroupTables(${tab.tab_id}, ${tableId})">Agrupar mesa</button>
           ${tab.is_calling_waiter
             ? `<button onclick="resolveWaiterCall(${tab.tab_id}, ${tableId})">Atendimento realizado</button>`
             : ""
@@ -483,8 +877,7 @@
 
       showFeedback("✔ Pedido enviado")
 
-      const currentTableId = document.getElementById("modal-title").textContent.replace("Mesa ", "")
-      await openTable(Number(currentTableId))
+      await openTable(Number(currentModalTableId))
       await loadTables()
     }
 
@@ -530,6 +923,44 @@
       alert("Link da sessão copiado.");
     }
 
+    async function copySessionLinkFromEncoded(encodedUrl) {
+      await copySessionLink(decodeURIComponent(encodedUrl));
+    }
+
+    function openCustomerViewFromEncoded(encodedUrl) {
+      window.open(decodeURIComponent(encodedUrl), "_blank", "noopener");
+    }
+
+    async function requestCloseFromStaff(tabId, tableId) {
+      try {
+        await apiFetch(`/tabs/${tabId}/request-close`, {
+          method: "PATCH"
+        });
+      } catch (error) {
+        alert(`Erro ao pedir a conta: ${error.message}`);
+        return;
+      }
+
+      await openTable(tableId);
+      await loadTables();
+      showFeedback("Conta pedida");
+    }
+
+    async function cancelClose(tabId, tableId) {
+      try {
+        await apiFetch(`/tabs/${tabId}/cancel-close`, {
+          method: "PATCH"
+        });
+      } catch (error) {
+        alert(`Erro ao cancelar a conta: ${error.message}`);
+        return;
+      }
+
+      await openTable(tableId);
+      await loadTables();
+      showFeedback("Conta cancelada");
+    }
+
     async function closeTab(tabId, tableId) {
       try {
         await apiFetch(`/tabs/${tabId}/close`, {
@@ -542,7 +973,7 @@
 
       await openTable(tableId);
       await loadTables();
-      showFeedback("✔ Comanda encerrada");
+      showFeedback("Comanda finalizada com sucesso");
     }
 
     async function resolveWaiterCall(tabId, tableId) {
@@ -565,124 +996,151 @@
       await loadTables();
     }
 
-    async function openGroupTables(tabId, tableId) {
+    async function openGroupTables(tableId) {
       let tables = [];
+      let group = { grouped_table_ids: [], grouped_table_numbers: [] };
 
       try {
-        const response = await apiFetch("/tables/status/all");
-        tables = await response.json();
+        const [tablesResponse, groupResponse] = await Promise.all([
+          apiFetch("/tables/status/all"),
+          apiFetch(`/tables/${tableId}/group`)
+        ]);
+        tables = await tablesResponse.json();
+        group = await groupResponse.json();
+        latestTableStatuses = tables;
       } catch (error) {
-        alert(`Erro ao carregar mesas: ${error.message}`);
+        alert(`Erro ao carregar agrupamento: ${error.message}`);
         return;
       }
 
-      const freeTables = tables.filter(table => table.status === "white");
-
+      const renderedTables = applyFrontendGroupsToTables(tables);
+      const currentTable = renderedTables.find(table => Number(table.table_id) === Number(tableId));
+      const groupedIds = currentTable
+        ? normalizeTableIds(currentTable.grouped_table_ids)
+        : normalizeTableIds(group.grouped_table_ids || [tableId]);
+      const groupedNumbers = getGroupNumbersFromIds(groupedIds, renderedTables);
+      const removableTables = renderedTables.filter(table =>
+        Number(table.table_id) !== Number(tableId) && groupedIds.includes(Number(table.table_id))
+      );
+      const selectableTables = renderedTables.filter(table => Number(table.table_id) !== Number(tableId));
       const body = document.getElementById("modal-body");
 
       body.innerHTML = `
-        <h3>Agrupar mesa</h3>
-        <div id="free-tables-list"></div>
-        <button onclick="confirmGroupTables(${tabId}, ${tableId})">Confirmar agrupamento</button>
+        <h3>Agrupar mesas</h3>
+        <p><strong>${formatGroupedTables(currentTable ? currentTable.table_number : tableId, groupedNumbers)}</strong></p>
+        <div id="current-group-list"></div>
+        <div id="tables-group-list" class="group-list"></div>
+        <button onclick="confirmGroupTables(${tableId})">Confirmar agrupamento</button>
         <button onclick="openTable(${tableId})">Voltar</button>
       `;
 
-      const list = document.getElementById("free-tables-list");
+      const currentGroupList = document.getElementById("current-group-list");
 
-      if (freeTables.length === 0) {
-        list.innerHTML = "<p>Nenhuma mesa livre disponível.</p>";
-        return;
+      if (removableTables.length > 0) {
+        currentGroupList.innerHTML = `
+          <p><strong>Mesas no grupo:</strong></p>
+          <div class="group-list">
+            ${removableTables.map(table => `
+              <div class="group-row">
+                <span>Mesa ${table.table_number}</span>
+                <button onclick="removeGroupedTable(${tableId}, ${table.table_id})">Remover</button>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      } else {
+        currentGroupList.innerHTML = "<p>Nenhuma mesa agrupada ainda.</p>";
       }
 
-      list.innerHTML = freeTables.map(table => `
-        <label style="display:block; margin-top:8px;">
-          <input
-            type="checkbox"
-            class="free-table-checkbox"
-            value="${table.table_id}"
-          />
-          Mesa ${table.table_number}
-        </label>
+      const list = document.getElementById("tables-group-list");
+      list.innerHTML = selectableTables.map(table => `
+        <div class="group-row">
+          <label>
+            <input
+              type="checkbox"
+              class="group-table-checkbox"
+              value="${table.table_id}"
+              ${groupedIds.includes(Number(table.table_id)) ? "checked" : ""}
+            />
+            <span>Mesa ${table.table_number} - ${table.reason} (${table.open_tabs_count} comandas)</span>
+          </label>
+        </div>
       `).join("");
     }
 
-    async function confirmGroupTables(tabId, tableId) {
-      const selectedTables = Array.from(document.querySelectorAll(".free-table-checkbox:checked"))
+    async function confirmGroupTables(tableId) {
+      const selectedTables = Array.from(document.querySelectorAll(".group-table-checkbox:checked"))
         .map(input => Number(input.value));
 
       if (selectedTables.length === 0) {
-        alert("Selecione ao menos uma mesa livre.");
+        alert("Selecione ao menos uma mesa para agrupar.");
         return;
       }
 
-      let response;
+      const groupIds = normalizeTableIds([tableId, ...selectedTables]);
+      const backendAnchorTableId = findGroupBackendAnchor(groupIds);
 
-      try {
-        response = await apiFetch(`/tabs/${tabId}/group-tables`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          table_ids: selectedTables
-        })
-        });
-      } catch (error) {
-        alert(error.message);
-        return;
-      }
-
-      if (!response.ok) {
-        const data = await response.json();
-        alert(data.detail || "Não foi possível agrupar as mesas.");
-        return;
+      if (backendAnchorTableId) {
+        try {
+          await apiFetch(`/tables/${backendAnchorTableId}/group`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              table_ids: groupIds.filter(id => id !== backendAnchorTableId)
+            })
+          });
+          removeFrontendOnlyGroupMembers(groupIds);
+        } catch (error) {
+          alert(`Erro ao agrupar mesas: ${error.message}`);
+          return;
+        }
+      } else {
+        setFrontendOnlyGroup(groupIds);
       }
 
       await openTable(tableId);
       await loadTables();
+      showFeedback("Mesas agrupadas com sucesso");
+    }
+
+    async function removeGroupedTable(tableId, groupedTableId) {
+      const backendGroupIds = getBackendGroupIdsForTable(tableId);
+
+      if (backendGroupIds.includes(Number(groupedTableId)) && backendGroupIds.length > 1) {
+        try {
+          await apiFetch(`/tables/${tableId}/group/${groupedTableId}`, {
+            method: "DELETE"
+          });
+        } catch (error) {
+          alert(`Erro ao remover mesa do grupo: ${error.message}`);
+          return;
+        }
+      } else {
+        removeFrontendOnlyGroupedTable(tableId, groupedTableId);
+      }
+
+      await openTable(tableId);
+      await loadTables();
+      showFeedback("Mesa removida do grupo");
     }
 
     async function openCreateTabForm(tableId) {
-      let tables = [];
-
-      try {
-        const response = await apiFetch("/tables/");
-        tables = await response.json();
-      } catch (error) {
-        alert(`Erro ao carregar mesas: ${error.message}`);
-        return;
-      }
-
       const body = document.getElementById("modal-body");
 
       body.innerHTML = `
     <h3>Abrir comanda</h3>
 
     <label>Nome do cliente ou grupo:</label>
-    <input id="new-tab-name" placeholder="Ex: João / Mesa da família" />
+    <input id="new-tab-name" placeholder="Ex: Jo&atilde;o / Mesa da fam&iacute;lia" />
 
-    <label>Observação:</label>
-    <textarea id="new-tab-observation" placeholder="Ex: Mesa junto com a 2, aniversário, sem gelo..." style="width:100%; min-height:80px; margin-top:12px;"></textarea>
-
-    <h4>Agrupar mesas</h4>
-    <div id="group-tables-list"></div>
+    <label>Observa&ccedil;&atilde;o:</label>
+    <textarea id="new-tab-observation" placeholder="Ex: anivers&aacute;rio, sem gelo..." style="width:100%; min-height:80px; margin-top:12px;"></textarea>
 
     <button onclick="confirmCreateTab(${tableId})">Abrir comanda</button>
+    <button onclick="openTable(${tableId})">Voltar</button>
   `;
-
-      const list = document.getElementById("group-tables-list");
-
-      list.innerHTML = tables.map(table => `
-    <label style="display:block; margin-top:8px;">
-      <input 
-        type="checkbox" 
-        class="group-table-checkbox" 
-        value="${table.id}" 
-        ${table.id === tableId ? "checked" : ""}
-      />
-      Mesa ${table.number}
-    </label>
-  `).join("");
     }
 
     async function confirmCreateTab(tableId) {
@@ -694,23 +1152,31 @@
         return;
       }
 
-      const selectedTables = Array.from(document.querySelectorAll(".group-table-checkbox:checked"))
-        .map(input => Number(input.value));
-
       try {
+        const currentTable = applyFrontendGroupsToTables(latestTableStatuses)
+          .find(table => Number(table.table_id) === Number(tableId));
+        const groupedTableIds = currentTable
+          ? normalizeTableIds(currentTable.grouped_table_ids)
+          : normalizeTableIds([tableId]);
+        const payload = {
+          table_id: tableId,
+          customer_name: name,
+          customer_phone: null,
+          observation: observation || null
+        };
+
+        if (groupedTableIds.length > 1) {
+          payload.grouped_table_ids = groupedTableIds;
+        }
+
         await apiFetch("/tabs/", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({
-            table_id: tableId,
-            customer_name: name,
-            customer_phone: null,
-            observation: observation || null,
-            grouped_table_ids: selectedTables
-          })
+          body: JSON.stringify(payload)
         });
+        removeFrontendOnlyGroupMembers(groupedTableIds);
       } catch (error) {
         alert(`Erro ao abrir comanda: ${error.message}`);
         return;
@@ -749,7 +1215,7 @@
 
       await openTable(tableId);
       await loadTables();
-      showFeedback("✔ Fechamento confirmado");
+      showFeedback("Conta confirmada");
     }
 
   </script>

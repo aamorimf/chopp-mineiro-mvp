@@ -83,7 +83,7 @@ def list_orders_by_tab(tab_id: int, db: Session = Depends(get_db)):
 
     orders = (
         db.query(Order)
-        .filter(Order.tab_id == tab_id, Order.is_cancelled == False)
+        .filter(Order.tab_id == tab_id, Order.is_cancelled.is_(False))
         .all()
     )
 

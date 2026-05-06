@@ -26,8 +26,7 @@ def clear_waiter_calls_for_table_ids(table_ids: list[int], db: Session):
     tables = db.query(Table).filter(Table.id.in_(set(table_ids))).all()
 
     for table in tables:
-        table.is_calling_waiter = False
-
+        setattr(table, "is_calling_waiter", False)
 
 def get_grouped_table_ids(tab: Tab) -> set[int]:
     ids = {tab.table_id}
@@ -42,6 +41,30 @@ def get_grouped_table_ids(tab: Tab) -> set[int]:
     return ids
 
 
+def serialize_grouped_table_ids(table_ids: set[int]) -> str | None:
+    if len(table_ids) <= 1:
+        return None
+
+    return ",".join(str(table_id) for table_id in sorted(table_ids))
+
+
+def expand_active_group_ids(seed_ids: set[int], open_tabs: list[Tab]) -> set[int]:
+    group_ids = set(seed_ids)
+    changed = True
+
+    while changed:
+        changed = False
+
+        for tab in open_tabs:
+            tab_table_ids = get_grouped_table_ids(tab)
+
+            if tab_table_ids & group_ids and not tab_table_ids.issubset(group_ids):
+                group_ids.update(tab_table_ids)
+                changed = True
+
+    return group_ids
+
+
 def tab_belongs_to_table(tab: Tab, table_id: int) -> bool:
     return table_id in get_grouped_table_ids(tab)
 
@@ -51,7 +74,7 @@ def calculate_tab_total(tab_id: int, db: Session) -> float:
         db.query(Order)
         .filter(
             Order.tab_id == tab_id,
-            Order.is_cancelled == False
+            Order.is_cancelled.is_(False)
         )
         .all()
     )
@@ -74,16 +97,14 @@ def create_tab(data: TabCreate, db: Session = Depends(get_db)):
     if not table:
         raise HTTPException(status_code=404, detail="Mesa não encontrada")
 
-    grouped_ids = data.grouped_table_ids or [data.table_id]
-
-    if data.table_id not in grouped_ids:
-        grouped_ids.append(data.table_id)
+    grouped_ids = set(data.grouped_table_ids or [])
+    grouped_ids.add(data.table_id)
 
     session = (
         db.query(TableSession)
         .filter(
             TableSession.table_id == data.table_id,
-            TableSession.is_active == True
+            TableSession.is_active.is_(True)
         )
         .first()
     )
@@ -98,7 +119,7 @@ def create_tab(data: TabCreate, db: Session = Depends(get_db)):
         db.refresh(session)
 
     # LIMPA CHAMADO SEMPRE
-    clear_waiter_calls_for_table_ids(grouped_ids, db)
+    clear_waiter_calls_for_table_ids(list(grouped_ids), db)
 
     tab = Tab(
         table_id=data.table_id,
@@ -106,7 +127,7 @@ def create_tab(data: TabCreate, db: Session = Depends(get_db)):
         customer_name=data.customer_name,
         customer_phone=data.customer_phone,
         observation=data.observation,
-        grouped_table_ids=",".join(str(id) for id in sorted(set(grouped_ids))),
+        grouped_table_ids=serialize_grouped_table_ids(grouped_ids),
 )
 
     db.add(tab)
@@ -133,63 +154,8 @@ def request_tab_close(tab_id: int, db: Session = Depends(get_db)):
     if not tab.is_open:
         raise HTTPException(status_code=400, detail="Comanda já está fechada")
 
-    has_active_orders = (
-        db.query(Order)
-        .filter(
-            Order.tab_id == tab.id,
-            Order.is_cancelled == False
-        )
-        .first()
-        is not None
-    )
-
-    if not has_active_orders:
-        tab.is_open = False
-        tab.is_requesting_close = False
-        tab.is_closing_confirmed = False
-        tab.is_calling_waiter = False
-
-        table_ids = [tab.table_id]
-
-        if tab.grouped_table_ids:
-            table_ids.extend(
-                int(table_id.strip())
-                for table_id in tab.grouped_table_ids.split(",")
-                if table_id.strip().isdigit()
-            )
-
-        clear_waiter_calls_for_table_ids(table_ids, db)
-
-        if tab.session_id:
-            has_open_tabs = (
-                db.query(Tab)
-                .filter(
-                    Tab.session_id == tab.session_id,
-                    Tab.id != tab.id,
-                    Tab.is_open == True
-                )
-                .first()
-            )
-
-            if not has_open_tabs:
-                session = db.query(TableSession).filter(TableSession.id == tab.session_id).first()
-                if session:
-                    session.is_active = False
-
-        db.commit()
-        db.refresh(tab)
-
-        return {
-            "id": tab.id,
-            "table_id": tab.table_id,
-            "customer_name": tab.customer_name,
-            "is_open": tab.is_open,
-            "is_requesting_close": tab.is_requesting_close,
-            "is_calling_waiter": tab.is_calling_waiter,
-            "is_closing_confirmed": tab.is_closing_confirmed,
-        }
-
     tab.is_requesting_close = True
+    tab.is_closing_confirmed = False
 
     db.commit()
     db.refresh(tab)
@@ -230,7 +196,7 @@ def close_tab(tab_id: int, db: Session = Depends(get_db)):
             db.query(Tab)
             .filter(
                 Tab.session_id == tab.session_id,
-                Tab.is_open == True
+                Tab.is_open.is_(True)
             )
             .first()
         )
@@ -248,13 +214,13 @@ def close_tab(tab_id: int, db: Session = Depends(get_db)):
 
 @router.get("/daily-summary")
 def get_daily_summary(db: Session = Depends(get_db)):
-    closed_tabs = db.query(Tab).filter(Tab.is_open == False).all()
-    open_tabs_count = db.query(Tab).filter(Tab.is_open == True).count()
+    closed_tabs = db.query(Tab).filter(Tab.is_open.is_(False)).all()
+    open_tabs_count = db.query(Tab).filter(Tab.is_open.is_(True)).count()
     closing_tabs_count = (
         db.query(Tab)
         .filter(
-            Tab.is_open == True,
-            Tab.is_closing_confirmed == True
+            Tab.is_open.is_(True),
+            Tab.is_closing_confirmed.is_(True)
         )
         .count()
     )
@@ -272,7 +238,7 @@ def get_daily_summary(db: Session = Depends(get_db)):
             db.query(Order)
             .filter(
                 Order.tab_id == tab.id,
-                Order.is_cancelled == False
+                Order.is_cancelled.is_(False)
             )
             .all()
         )
@@ -334,7 +300,7 @@ def list_open_tabs_by_table(table_id: int, db: Session = Depends(get_db)):
 
     tabs = (
         db.query(Tab)
-        .filter(Tab.table_id == table_id, Tab.is_open == True)
+        .filter(Tab.table_id == table_id, Tab.is_open.is_(True))
         .all()
     )
 
@@ -360,6 +326,7 @@ def cancel_tab_close(tab_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Comanda já está fechada")
 
     tab.is_requesting_close = False
+    tab.is_closing_confirmed = False
 
     db.commit()
     db.refresh(tab)
@@ -377,8 +344,9 @@ def group_tables(tab_id: int, data: TableGroupRequest, db: Session = Depends(get
         raise HTTPException(status_code=400, detail="Comanda já está fechada")
 
     requested_ids = set(data.table_ids or [])
+    requested_ids.add(tab.table_id)
 
-    if not requested_ids:
+    if len(requested_ids) <= 1:
         raise HTTPException(status_code=400, detail="Nenhuma mesa selecionada")
 
     tables = db.query(Table).filter(Table.id.in_(requested_ids)).all()
@@ -388,27 +356,13 @@ def group_tables(tab_id: int, data: TableGroupRequest, db: Session = Depends(get
     if missing_ids:
         raise HTTPException(status_code=404, detail="Mesa não encontrada")
 
-    grouped_ids = get_grouped_table_ids(tab)
-    new_table_ids = requested_ids - grouped_ids
+    all_open_tabs = db.query(Tab).filter(Tab.is_open.is_(True)).all()
+    grouped_ids = expand_active_group_ids(requested_ids, all_open_tabs)
+    serialized_group = serialize_grouped_table_ids(grouped_ids)
 
-    all_open_tabs = db.query(Tab).filter(Tab.is_open == True).all()
-
-    for table in tables:
-        if table.id not in new_table_ids:
-            continue
-
-        if table.is_calling_waiter:
-            raise HTTPException(status_code=400, detail="Mesa não está livre")
-
-        for open_tab in all_open_tabs:
-            if open_tab.id == tab.id:
-                continue
-
-            if tab_belongs_to_table(open_tab, table.id):
-                raise HTTPException(status_code=400, detail="Mesa não está livre")
-
-    grouped_ids.update(new_table_ids)
-    tab.grouped_table_ids = ",".join(str(table_id) for table_id in sorted(grouped_ids))
+    for open_tab in all_open_tabs:
+        if get_grouped_table_ids(open_tab) & grouped_ids:
+            open_tab.grouped_table_ids = serialized_group
 
     db.commit()
 
