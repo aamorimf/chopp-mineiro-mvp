@@ -182,6 +182,16 @@
       margin: 10px 0 8px;
     }
 
+    .pending-close-warning {
+      background: #3a2710;
+      border: 1px solid #ffd447;
+      border-radius: 10px;
+      color: #ffd447;
+      font-weight: bold;
+      margin-top: 10px;
+      padding: 12px;
+    }
+
     .tab-close-section {
       background: #1b1b1b;
       border: 1px solid #444;
@@ -375,6 +385,21 @@
     .receipt-item-price {
       color: #ddd;
       white-space: nowrap;
+    }
+
+    .payment-method-box {
+      margin: 0 18px 18px;
+    }
+
+    .payment-method-box select {
+      width: 100%;
+      margin-top: 8px;
+      padding: 14px;
+      border-radius: 10px;
+      border: none;
+      font-size: 16px;
+      background: #fff;
+      color: #111;
     }
 
     .receipt-total {
@@ -741,7 +766,22 @@
             </div>
           `;
         }).join("");
-      const actionsHtml = `
+      
+        const paymentSelectorHtml = tab.is_closing_confirmed
+          ? `
+            <div class="payment-method-box">
+              <label for="payment-method"><strong>Forma de pagamento:</strong></label>
+              <select id="payment-method">
+                <option value="">Selecione</option>
+                <option value="cash">Dinheiro</option>
+                <option value="pix">Pix</option>
+                <option value="debit">Débito</option>
+                <option value="credit">Crédito</option>
+              </select>
+            </div>
+          `
+          : "";      
+        const actionsHtml = `
         <button class="receipt-secondary-action" onclick="cancelClose(${tab.tab_id}, ${tableId})">Cancelar fechamento</button>
         ${!tab.is_closing_confirmed
           ? `<button onclick="confirmClose(${tab.tab_id}, ${tableId})">Confirmar conta</button>`
@@ -749,7 +789,7 @@
         }
         ${tab.is_closing_confirmed
           ? `
-            <button onclick="closeTab(${tab.tab_id}, ${tableId})">
+            <button onclick="closeTab(${tab.tab_id}, ${tableId}, ${total})">
               <div>Confirmar Pagamento</div>
               <div style="font-size: 11px; opacity: 0.8;">
                 (Encerrar Comanda)
@@ -777,6 +817,7 @@
             <span class="receipt-total-label">Total final</span>
             <span class="receipt-total-value">${formatMoney(total)}</span>
           </div>
+          ${paymentSelectorHtml}
           <div class="receipt-actions">${actionsHtml}</div>
         </div>
       `;
@@ -1033,6 +1074,7 @@
         let ordersHtml = "";
         let total = 0;
         const isClosingFlow = tab.is_requesting_close || tab.is_closing_confirmed;
+        const hasPendingOrders = (tab.orders || []).some(order => !order.is_delivered);
 
         if (tab.orders.length === 0) {
           ordersHtml = "<p>Nenhum pedido nesta comanda.</p>";
@@ -1066,10 +1108,20 @@
         }
 
         const closeActionsHtml = `
-          ${!tab.is_requesting_close && !tab.is_closing_confirmed
+          ${!tab.is_requesting_close && !tab.is_closing_confirmed && !hasPendingOrders
             ? `<button onclick="requestCloseFromStaff(${tab.tab_id}, ${tableId})">Pedir conta</button>`
             : ""
           }
+
+          ${!tab.is_requesting_close && !tab.is_closing_confirmed && hasPendingOrders
+            ? `
+              <div class="pending-close-warning">
+                Existem pedidos pendentes. Marque como entregue ou cancele antes de pedir a conta.
+              </div>
+            `
+            : ""
+          }
+
           ${isClosingFlow
             ? `<button onclick="showStaffReceipt(${tab.tab_id}, ${tableId})">Ver conta</button>`
             : ""
@@ -1303,10 +1355,24 @@
       showFeedback("Conta cancelada");
     }
 
-    async function closeTab(tabId, tableId) {
+    async function closeTab(tabId, tableId, closedTotal) {
+      const paymentMethod = document.getElementById("payment-method")?.value;
+
+      if (!paymentMethod) {
+        alert("Selecione a forma de pagamento.");
+        return;
+      }
+
       try {
         await apiFetch(`/tabs/${tabId}/close`, {
-          method: "PATCH"
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            payment_method: paymentMethod,
+            closed_total: closedTotal
+          })
         });
       } catch (error) {
         alert(`Erro ao encerrar comanda: ${error.message}`);

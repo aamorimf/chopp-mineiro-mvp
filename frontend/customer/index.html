@@ -132,7 +132,6 @@
             <div id="open-tabs-list"></div>
 
             <button id="menu-btn" onclick="showMenuOnly()">Ver cardápio</button>
-            <button id="call-waiter-btn" onclick="callWaiterFromTable()">Chamar garçom</button>
         </div>
 
         <div id="open-tab-card" class="card hidden">
@@ -151,15 +150,6 @@
             <hr style="border: 0; border-top: 1px solid #444; margin: 20px 0;">
             <h3>Outras pessoas na mesa</h3>
             <div id="others-on-table"></div>
-            <button onclick="loadMyOrders()">Atualizar comanda</button>
-            <button onclick="requestCloseTab()">Pedir conta</button>
-            <button onclick="callWaiter()">Chamar garçom</button>
-        </div>
-
-        <div id="waiter-card" class="card hidden">
-            <h2>Garçom chamado</h2>
-            <p>Aguarde, um atendente irá até sua mesa.</p>
-            <button onclick="cancelWaiterCall()">Cancelar chamado</button>
         </div>
 
         <div id="closing-card" class="card hidden">
@@ -359,7 +349,6 @@
             document.getElementById("open-tab-card")?.classList.add("hidden");
             document.getElementById("success-card")?.classList.add("hidden");
             document.getElementById("my-tab-card")?.classList.add("hidden");
-            document.getElementById("waiter-card")?.classList.add("hidden");
             document.getElementById("closing-card")?.classList.add("hidden");
             document.getElementById("closed-card")?.classList.add("hidden");
             document.getElementById("cart")?.classList.add("hidden");
@@ -387,11 +376,6 @@
                 menuButton.style.display = "block";
                 menuButton.textContent = "Ver cardápio";
             }
-
-            const waiterButton = document.getElementById("call-waiter-btn");
-            if (waiterButton) {
-                waiterButton.style.display = "none";
-            }
         }
 
         async function showPublicMenu() {
@@ -418,11 +402,6 @@
             if (menuButton) {
                 menuButton.style.display = "block";
                 menuButton.textContent = "Ver cardápio";
-            }
-
-            const waiterButton = document.getElementById("call-waiter-btn");
-            if (waiterButton) {
-                waiterButton.style.display = "none";
             }
 
             const list = document.getElementById("open-tabs-list");
@@ -615,26 +594,6 @@
             }
         }
 
-        async function requestCloseTab() {
-            const tab_id = localStorage.getItem("current_tab_id");
-            if (!tab_id) return;
-            if (!activeSessionToken) {
-                enterPublicMode();
-                return;
-            }
-
-            const confirmed = confirm("Deseja pedir a conta e solicitar o pagamento?");
-            if (!confirmed) return;
-
-            try {
-                await apiFetch(`/tabs/${tab_id}/request-close`, { method: "PATCH" });
-                enterClosingMode();
-            } catch (error) {
-                console.error("Erro na requisição de fechamento:", error);
-                alert(`Erro ao solicitar fechamento: ${error.message}`);
-            }
-        }
-
         function enterClosingMode() {
             document.getElementById("products")?.classList.add("hidden");
             document.getElementById("cart")?.classList.add("hidden");
@@ -723,14 +682,6 @@
             } else {
                 document.getElementById("closing-card")?.classList.add("hidden");
             }
-
-            const tableIsCallingWaiter = data.is_calling_waiter === true;
-
-            if (tab.is_calling_waiter || tableIsCallingWaiter) {
-                document.getElementById("waiter-card")?.classList.remove("hidden");
-            } else {
-                document.getElementById("waiter-card")?.classList.add("hidden");
-            }
         }
 
         function enterClosedMode() {
@@ -745,7 +696,6 @@
             document.getElementById("cart")?.classList.add("hidden");
             document.getElementById("my-tab-card")?.classList.add("hidden");
             document.getElementById("closing-card")?.classList.add("hidden");
-            document.getElementById("waiter-card")?.classList.add("hidden");
             document.getElementById("table-home-card")?.classList.add("hidden");
 
             document.getElementById("closed-card").classList.remove("hidden");
@@ -762,60 +712,6 @@
 
                 window.location.href = `${window.location.pathname}?${redirectParams.toString()}`;
             }, 20000);
-        }
-
-        async function callWaiter() {
-            const tabId = localStorage.getItem("current_tab_id");
-
-            if (!tabId) return;
-            if (!activeSessionToken) {
-                enterPublicMode();
-                return;
-            }
-
-            try {
-                await apiFetch(`/tabs/${tabId}/call-waiter`, {
-                    method: "PATCH"
-                });
-            } catch (error) {
-                alert(`Erro ao chamar garçom: ${error.message}`);
-                return;
-            }
-
-            document.getElementById("waiter-card").classList.remove("hidden");
-        }
-
-        async function cancelWaiterCall() {
-            const confirmed = confirm("Deseja cancelar o chamado do garçom?");
-
-            if (!confirmed) return;
-            if (!activeSessionToken) {
-                enterPublicMode();
-                return;
-            }
-
-            const tabId = localStorage.getItem("current_tab_id");
-
-            try {
-                if (tabId) {
-                    await apiFetch(`/tabs/${tabId}/cancel-waiter`, {
-                        method: "PATCH"
-                    });
-                } else {
-                    await apiFetch(`/tables/${tableId}/cancel-waiter`, {
-                        method: "PATCH"
-                    });
-                }
-            } catch (error) {
-                alert(`Erro ao cancelar chamado: ${error.message}`);
-                return;
-            }
-
-            document.getElementById("waiter-card").classList.add("hidden");
-        }
-
-        function enterPublicMode() {
-            showPublicHome();
         }
 
         async function loadTableContext() {
@@ -892,36 +788,6 @@
                 showPublicMenu();
             }
         }
-
-        async function callWaiterFromTable() {
-            if (!activeSessionToken) {
-                enterPublicMode();
-                return;
-            }
-
-            if (!tableHasOpenTabs) return;
-
-            let response;
-
-            try {
-                response = await apiFetch(`/tables/${tableId}/call-waiter`, {
-                method: "PATCH"
-                });
-            } catch (error) {
-                alert(error.message);
-                return;
-            }
-
-            if (!response.ok) {
-                const data = await response.json();
-                alert(data.detail || "Não foi possível chamar o garçom.");
-                return;
-            }
-
-            document.getElementById("waiter-card").classList.remove("hidden");
-        }
-
-
     </script>
 </body>
 

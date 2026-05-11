@@ -1,4 +1,5 @@
 from uuid import uuid4
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -6,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import Table, Tab, TableSession, Order, Product
-from app.schemas import TabCreate
+from app.schemas import TabCreate, TabCloseRequest
 
 router = APIRouter(prefix="/tabs", tags=["Tabs"])
 
@@ -154,6 +155,23 @@ def request_tab_close(tab_id: int, db: Session = Depends(get_db)):
     if not tab.is_open:
         raise HTTPException(status_code=400, detail="Comanda já está fechada")
 
+    has_pending_orders = (
+        db.query(Order)
+        .filter(
+            Order.tab_id == tab.id,
+            Order.is_cancelled.is_(False),
+            Order.is_delivered.is_(False),
+        )
+        .first()
+        is not None
+    )
+
+    if has_pending_orders:
+        raise HTTPException(
+            status_code=400,
+            detail="Existe pedido pendente nesta comanda. Marque como entregue ou cancele antes de pedir a conta."
+        )
+
     tab.is_requesting_close = True
     tab.is_closing_confirmed = False
 
@@ -171,7 +189,7 @@ def request_tab_close(tab_id: int, db: Session = Depends(get_db)):
     }
 
 @router.patch("/{tab_id}/close")
-def close_tab(tab_id: int, db: Session = Depends(get_db)):
+def close_tab(tab_id: int, data: TabCloseRequest, db: Session = Depends(get_db)):
     tab = db.query(Tab).filter(Tab.id == tab_id).first()
 
     if not tab:
@@ -180,16 +198,23 @@ def close_tab(tab_id: int, db: Session = Depends(get_db)):
     if not tab.is_closing_confirmed:
         raise HTTPException(status_code=400, detail="Fechamento ainda não confirmado")
 
-    tab.is_open = False
+    valid_payment_methods = {"cash", "pix", "debit", "credit"}
 
+    if data.payment_method not in valid_payment_methods:
+        raise HTTPException(status_code=400, detail="Forma de pagamento inválida")
+
+    tab.is_open = False
     tab.is_calling_waiter = False
-    
-    table = db.query(Table).filter(Table.id == tab.table_id).first()
-    if table:
-        table.is_calling_waiter = False    
-    
     tab.is_requesting_close = False
     tab.is_closing_confirmed = False
+
+    tab.payment_method = data.payment_method
+    tab.closed_total = data.closed_total if data.closed_total is not None else calculate_tab_total(tab.id, db)
+    tab.closed_at = datetime.now()
+
+    table = db.query(Table).filter(Table.id == tab.table_id).first()
+    if table:
+        table.is_calling_waiter = False
 
     if tab.session_id:
         has_open_tabs = (
@@ -209,7 +234,12 @@ def close_tab(tab_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(tab)
 
-    return {"message": "Comanda encerrada"}
+    return {
+        "message": "Comanda encerrada",
+        "payment_method": tab.payment_method,
+        "closed_total": tab.closed_total,
+        "closed_at": tab.closed_at,
+    }
 
 
 @router.get("/daily-summary")
@@ -229,10 +259,26 @@ def get_daily_summary(db: Session = Depends(get_db)):
     items_by_product = {}
     total_revenue = 0
 
+    payment_methods = {
+        "cash": {"label": "Dinheiro", "total": 0, "count": 0},
+        "pix": {"label": "Pix", "total": 0, "count": 0},
+        "debit": {"label": "Débito", "total": 0, "count": 0},
+        "credit": {"label": "Crédito", "total": 0, "count": 0},
+        "unknown": {"label": "Não informado", "total": 0, "count": 0},
+    }
+
     for tab in closed_tabs:
         table = db.query(Table).filter(Table.id == tab.table_id).first()
-        total_amount = calculate_tab_total(tab.id, db)
+        total_amount = tab.closed_total if tab.closed_total is not None else calculate_tab_total(tab.id, db)
         total_revenue += total_amount
+
+        payment_method = tab.payment_method or "unknown"
+
+        if payment_method not in payment_methods:
+            payment_method = "unknown"
+
+        payment_methods[payment_method]["total"] += total_amount
+        payment_methods[payment_method]["count"] += 1
 
         orders = (
             db.query(Order)
@@ -266,6 +312,7 @@ def get_daily_summary(db: Session = Depends(get_db)):
                 "table_number": table.number if table else tab.table_id,
                 "customer_name": tab.customer_name,
                 "total_amount": total_amount,
+                "payment_method": tab.payment_method,
             }
         )
 
@@ -288,6 +335,7 @@ def get_daily_summary(db: Session = Depends(get_db)):
         "closing_tabs_count": closing_tabs_count,
         "closed_tabs": closed_tabs_result,
         "items_sold": items_sold,
+        "payment_methods": payment_methods,
     }
 
 

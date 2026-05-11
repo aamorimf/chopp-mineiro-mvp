@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, Float, DateTime
 from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
@@ -42,6 +42,10 @@ class Tab(Base):
     is_requesting_close = Column(Boolean, default=False)
     is_closing_confirmed = Column(Boolean, default=False)
     is_calling_waiter = Column(Boolean, default=False)
+
+    payment_method = Column(String, nullable=True)
+    closed_total = Column(Float, nullable=True)
+    closed_at = Column(DateTime, nullable=True)
 
     table = relationship("Table", back_populates="tabs")
     orders = relationship("Order", back_populates="tab")

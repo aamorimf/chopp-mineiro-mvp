@@ -217,6 +217,25 @@
       return `R$ ${Number(value || 0).toFixed(2)}`;
     }
 
+    function translatePaymentMethod(method) {
+      switch (method) {
+        case "cash":
+          return "💵 Dinheiro";
+
+        case "pix":
+          return "📱 Pix";
+
+        case "debit":
+          return "💳 Débito";
+
+        case "credit":
+          return "🏦 Crédito";
+
+        default:
+          return "Não informado";
+      }
+    }
+
     function renderSummary(data) {
       const revenueHero = document.getElementById("revenue-hero");
       const grid = document.getElementById("summary-grid");
@@ -231,17 +250,48 @@
           <div class="summary-label">Comandas encerradas</div>
           <div class="summary-value">${data.closed_tabs_count}</div>
         </div>
+
         <div class="summary-card">
           <div class="summary-label">Ticket médio</div>
           <div class="summary-value">${formatCurrency(data.average_ticket)}</div>
         </div>
+
         <div class="summary-card">
           <div class="summary-label">Comandas abertas</div>
           <div class="summary-value">${data.open_tabs_count}</div>
         </div>
+
         <div class="summary-card">
           <div class="summary-label">Em fechamento</div>
           <div class="summary-value">${data.closing_tabs_count}</div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-label">💵 Dinheiro</div>
+          <div class="summary-value">
+            ${formatCurrency(data.payment_methods.cash.total)}
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-label">📱 Pix</div>
+          <div class="summary-value">
+            ${formatCurrency(data.payment_methods.pix.total)}
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-label">💳 Débito</div>
+          <div class="summary-value">
+            ${formatCurrency(data.payment_methods.debit.total)}
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-label">🏦 Crédito</div>
+          <div class="summary-value">
+            ${formatCurrency(data.payment_methods.credit.total)}
+          </div>
         </div>
       `;
     }
@@ -256,8 +306,17 @@
 
       container.innerHTML = closedTabs.map(tab => `
         <div class="list-row">
-          <span>Mesa ${tab.table_number} | ${tab.customer_name}</span>
-          <span class="strong">${formatCurrency(tab.total_amount)}</span>
+          <span>
+            Mesa ${tab.table_number} | ${tab.customer_name}
+            <br>
+            <span class="muted">
+              ${translatePaymentMethod(tab.payment_method)}
+            </span>
+          </span>
+
+          <span class="strong">
+            ${formatCurrency(tab.total_amount)}
+          </span>
         </div>
       `).join("");
     }

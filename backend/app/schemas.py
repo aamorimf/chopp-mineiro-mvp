@@ -45,3 +45,7 @@ class OrderItem(BaseModel):
 class OrderBatchCreate(BaseModel):
     tab_id: int
     items: list[OrderItem]
+
+class TabCloseRequest(BaseModel):
+    payment_method: str
+    closed_total: float | None = None
