@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import Table, Tab, Order, Product, TableSession
+from app.models import Table, Tab, Order, Product, TableSession, SystemSettings
 from app.schemas import TableResponse
 
 router = APIRouter(prefix="/tables", tags=["Tables"])
@@ -249,16 +249,28 @@ def build_table_details(
             session = db.query(TableSession).filter(TableSession.id == tab.session_id).first()
 
         result_tab = {
-            "tab_id": tab.id,
-            "customer_name": tab.customer_name,
-            "is_open": tab.is_open,
-            "is_requesting_close": tab.is_requesting_close,
-            "is_closing_confirmed": tab.is_closing_confirmed,
-            "is_calling_waiter": tab.is_calling_waiter,
-            "orders": result_orders,
-            "observation": tab.observation,
-            "grouped_table_ids": tab.grouped_table_ids,
-        }
+        "tab_id": tab.id,
+        "customer_name": tab.customer_name,
+        "is_open": tab.is_open,
+        "is_requesting_close": tab.is_requesting_close,
+        "is_closing_confirmed": tab.is_closing_confirmed,
+        "is_calling_waiter": tab.is_calling_waiter,
+
+        "apply_service_fee": tab.apply_service_fee,
+        "apply_couvert": tab.apply_couvert,
+        "current_bill_total": tab.current_bill_total,
+
+        "service_fee_percentage": 10,
+        "couvert_price": (
+            db.query(SystemSettings).first().couvert_price
+            if db.query(SystemSettings).first()
+            else 0
+        ),
+
+        "orders": result_orders,
+        "observation": tab.observation,
+        "grouped_table_ids": tab.grouped_table_ids,
+    }
 
         if include_session_token:
             result_tab["session_token"] = session.session_token if session else None

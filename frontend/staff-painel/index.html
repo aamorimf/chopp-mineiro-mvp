@@ -387,6 +387,37 @@
       white-space: nowrap;
     }
 
+    .receipt-options {
+      display: grid;
+      gap: 10px;
+      margin: 18px;
+    }
+
+    .receipt-option-row {
+      align-items: center;
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 10px;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: auto 1fr auto;
+      padding: 12px;
+    }
+
+    .receipt-option-row input {
+      margin: 0;
+      width: auto;
+    }
+
+    .receipt-option-row span {
+      color: #fff;
+    }
+
+    .receipt-option-row strong {
+      color: #ffd447;
+      white-space: nowrap;
+    }
+
     .payment-method-box {
       margin: 0 18px 18px;
     }
@@ -636,6 +667,7 @@
     let currentModalTableId = null;
     let latestTableStatuses = [];
     let frontendOnlyTableGroups = [];
+    let systemSettings = null;
 
     function showFeedback(message) {
       const toast = document.getElementById("feedback-toast");
@@ -695,6 +727,15 @@
       return `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(customerUrl)}`;
     }
 
+    async function loadSystemSettings() {
+      try {
+        const response = await apiFetch("/settings/");
+        systemSettings = await response.json();
+      } catch (error) {
+        console.error("Erro ao carregar settings:", error);
+      }
+}
+
     function formatMoney(value) {
       return `R$ ${Number(value || 0).toFixed(2)}`;
     }
@@ -703,6 +744,63 @@
       return (tab.orders || []).reduce((sum, order) => {
         return sum + (Number(order.price || 0) * Number(order.quantity || 0));
       }, 0);
+    }
+
+    async function recalculateReceiptTotal(baseTotal, tabId = null) {
+      const serviceFeeInput = document.getElementById("apply-service-fee");
+      const couvertInput = document.getElementById("apply-couvert");
+
+      const applyServiceFee = serviceFeeInput?.checked === true;
+      const applyCouvert = couvertInput?.checked === true;
+
+      const servicePercentage = Number(systemSettings?.service_fee_percentage || 10);
+      const couvertPrice = Number(systemSettings?.couvert_price || 0);
+
+      const serviceValue = applyServiceFee
+        ? baseTotal * (servicePercentage / 100)
+        : 0;
+
+      const couvertValue = applyCouvert
+        ? couvertPrice
+        : 0;
+
+      const finalTotal = baseTotal + serviceValue + couvertValue;
+
+      const serviceValueEl = document.getElementById("receipt-service-value");
+      const couvertValueEl = document.getElementById("receipt-couvert-value");
+      const finalTotalEl = document.getElementById("receipt-final-total");
+
+      if (serviceValueEl) {
+        serviceValueEl.textContent = formatMoney(serviceValue);
+      }
+
+      if (couvertValueEl) {
+        couvertValueEl.textContent = formatMoney(couvertValue);
+      }
+
+      if (finalTotalEl) {
+        finalTotalEl.textContent = formatMoney(finalTotal);
+      }
+
+      if (tabId) {
+        try {
+          await apiFetch(`/tabs/${tabId}/bill`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              apply_service_fee: applyServiceFee,
+              apply_couvert: applyCouvert,
+              current_bill_total: finalTotal
+            })
+          });
+        } catch (error) {
+          console.error("Erro ao atualizar conta:", error);
+        }
+      }
+
+      return finalTotal;
     }
 
     function setModalHeaderActions(html = "") {
@@ -746,7 +844,7 @@
       setModalHeaderActions();
 
       const orders = tab.orders || [];
-      const total = calculateTabTotal(tab);
+      const baseTotal = calculateTabTotal(tab);
       const statusText = tab.is_closing_confirmed
         ? "Conta confirmada - aguardando pagamento"
         : "Conta solicitada";
@@ -766,6 +864,46 @@
             </div>
           `;
         }).join("");
+
+        const financialOptionsHtml = `
+          <div class="receipt-options">
+            ${systemSettings?.service_fee_enabled
+              ? `
+                <label class="receipt-option-row">
+                  <input
+                    type="checkbox"
+                    id="apply-service-fee"
+                    checked
+                    onchange="recalculateReceiptTotal(${baseTotal}, ${tab.tab_id})"
+                  >
+                  <span>
+                    Cobrar ${Number(systemSettings?.service_fee_percentage || 10)}% do garçom
+                  </span>
+                  <strong id="receipt-service-value"></strong>
+                </label>
+              `
+              : ""
+            }
+
+            ${systemSettings?.couvert_enabled
+              ? `
+                <label class="receipt-option-row">
+                  <input
+                    type="checkbox"
+                    id="apply-couvert"
+                    checked
+                    onchange="recalculateReceiptTotal(${baseTotal}, ${tab.tab_id})"
+                  >
+                  <span>
+                    Cobrar couvert artístico
+                  </span>
+                  <strong id="receipt-couvert-value"></strong>
+                </label>
+              `
+              : ""
+            }
+          </div>
+        `;
       
         const paymentSelectorHtml = tab.is_closing_confirmed
           ? `
@@ -789,7 +927,7 @@
         }
         ${tab.is_closing_confirmed
           ? `
-            <button onclick="closeTab(${tab.tab_id}, ${tableId}, ${total})">
+            <button onclick="closeTab(${tab.tab_id}, ${tableId}, ${baseTotal})">
               <div>Confirmar Pagamento</div>
               <div style="font-size: 11px; opacity: 0.8;">
                 (Encerrar Comanda)
@@ -813,16 +951,20 @@
           </div>
           <div class="receipt-status">${statusText}</div>
           <div class="receipt-items">${itemsHtml}</div>
+          ${financialOptionsHtml}
+
           <div class="receipt-total">
             <span class="receipt-total-label">Total final</span>
-            <span class="receipt-total-value">${formatMoney(total)}</span>
+            <span class="receipt-total-value" id="receipt-final-total">${formatMoney(baseTotal)}</span>
           </div>
+          
           ${paymentSelectorHtml}
           <div class="receipt-actions">${actionsHtml}</div>
         </div>
       `;
 
       document.getElementById("modal").classList.remove("hidden");
+      recalculateReceiptTotal(baseTotal, tab.tab_id);
     }
 
     function formatGroupedTables(currentTableNumber, groupedTableNumbers = []) {
@@ -1371,7 +1513,7 @@
           },
           body: JSON.stringify({
             payment_method: paymentMethod,
-            closed_total: closedTotal
+            closed_total: recalculateReceiptTotal(closedTotal)
           })
         });
       } catch (error) {
@@ -1644,8 +1786,14 @@
       await loadTables();
     }
 
-    loadTables();
-    setInterval(loadTables, 5000);
+    async function initializeStaffPanel() {
+      await loadSystemSettings();
+      await loadTables();
+
+      setInterval(loadTables, 5000);
+    }
+
+initializeStaffPanel();
 
     async function confirmClose(tabId, tableId) {
       try {

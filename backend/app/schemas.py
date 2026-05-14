@@ -49,3 +49,8 @@ class OrderBatchCreate(BaseModel):
 class TabCloseRequest(BaseModel):
     payment_method: str
     closed_total: float | None = None
+
+class TabBillUpdate(BaseModel):
+    apply_service_fee: bool
+    apply_couvert: bool
+    current_bill_total: float

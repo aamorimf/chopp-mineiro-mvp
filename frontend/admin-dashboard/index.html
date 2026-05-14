@@ -89,6 +89,29 @@
       padding: 16px;
     }
 
+    .settings-grid {
+      display: grid;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .settings-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .settings-item input[type="number"] {
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      font-size: 16px;
+    }
+
+    .settings-item label {
+      font-weight: bold;
+    }
+
     .summary-label {
       color: #bbb;
       font-size: 13px;
@@ -190,6 +213,42 @@
       <p class="subtitle">Resumo em tempo real do seu bar</p>
     </div>
   </div>
+
+  <section>
+  <h2>⚙️ Configurações Financeiras</h2>
+
+  <div class="panel">
+    <div class="settings-grid">
+
+      <div class="settings-item">
+        <label>
+          <input type="checkbox" id="service-fee-enabled">
+          Cobrar 10% do garçom
+        </label>
+      </div>
+
+      <div class="settings-item">
+        <label>Percentual do serviço (%)</label>
+        <input type="number" id="service-fee-percentage" min="0" max="100" step="0.5">
+      </div>
+
+      <div class="settings-item">
+        <label>
+          <input type="checkbox" id="couvert-enabled">
+          Cobrar couvert artístico
+        </label>
+      </div>
+
+      <div class="settings-item">
+        <label>Valor do couvert</label>
+        <input type="number" id="couvert-price" min="0" step="0.5">
+      </div>
+
+    </div>
+
+    <button onclick="saveSettings()">Salvar configurações</button>
+  </div>
+</section>
 
   <section>
     <h2>📊 Resumo do Dia</h2>
@@ -365,6 +424,60 @@
       renderItemsSold(data.items_sold);
     }
 
+    async function loadSettings() {
+      try {
+        const response = await apiFetch("/settings/");
+        const settings = await response.json();
+
+        document.getElementById("service-fee-enabled").checked =
+          settings.service_fee_enabled;
+
+        document.getElementById("service-fee-percentage").value =
+          settings.service_fee_percentage;
+
+        document.getElementById("couvert-enabled").checked =
+          settings.couvert_enabled;
+
+        document.getElementById("couvert-price").value =
+          settings.couvert_price;
+
+      } catch (error) {
+        console.error("Erro ao carregar configurações:", error);
+      }
+    }
+
+    async function saveSettings() {
+      const payload = {
+        service_fee_enabled:
+          document.getElementById("service-fee-enabled").checked,
+
+        service_fee_percentage:
+          Number(document.getElementById("service-fee-percentage").value),
+
+        couvert_enabled:
+          document.getElementById("couvert-enabled").checked,
+
+        couvert_price:
+          Number(document.getElementById("couvert-price").value),
+      };
+
+      try {
+        await apiFetch("/settings/", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        alert("Configurações salvas com sucesso");
+
+      } catch (error) {
+        alert(`Erro ao salvar configurações: ${error.message}`);
+      }
+    }
+    
+    loadSettings();
     loadDailySummary();
     setInterval(loadDailySummary, 5000);
   </script>

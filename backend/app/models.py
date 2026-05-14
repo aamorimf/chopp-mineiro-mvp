@@ -47,6 +47,10 @@ class Tab(Base):
     closed_total = Column(Float, nullable=True)
     closed_at = Column(DateTime, nullable=True)
 
+    apply_service_fee = Column(Boolean, default=True)
+    apply_couvert = Column(Boolean, default=False)
+    current_bill_total = Column(Float, nullable=True)
+
     table = relationship("Table", back_populates="tabs")
     orders = relationship("Order", back_populates="tab")
 
@@ -74,3 +78,14 @@ class Order(Base):
     is_delivered = Column(Boolean, default=False)
 
     tab = relationship("Tab", back_populates="orders")
+
+class SystemSettings(Base):
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    service_fee_enabled = Column(Boolean, default=True)
+    service_fee_percentage = Column(Float, default=10)
+
+    couvert_enabled = Column(Boolean, default=False)
+    couvert_price = Column(Float, default=0)

@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Base
+from app.models import Base, SystemSettings
 
 DATABASE_URL = "sqlite:///./chopp-mineiro.db"
 
@@ -26,6 +26,18 @@ def run_manual_migrations():
         """
         ALTER TABLE tabs
         ADD COLUMN closed_at DATETIME
+        """,
+        """
+        ALTER TABLE tabs
+        ADD COLUMN apply_service_fee BOOLEAN DEFAULT 1
+        """,
+        """
+        ALTER TABLE tabs
+        ADD COLUMN apply_couvert BOOLEAN DEFAULT 0
+        """,
+        """
+        ALTER TABLE tabs
+        ADD COLUMN current_bill_total FLOAT
         """
     ]
 
@@ -37,6 +49,25 @@ def run_manual_migrations():
             except Exception:
                 # coluna já existe
                 pass
+
+    session = SessionLocal()
+
+    try:
+        settings_exists = session.query(SystemSettings).first()
+
+        if not settings_exists:
+            settings = SystemSettings(
+                service_fee_enabled=True,
+                service_fee_percentage=10,
+                couvert_enabled=False,
+                couvert_price=0,
+            )
+
+            session.add(settings)
+            session.commit()
+
+    finally:
+        session.close()
 
 
 def init_db():

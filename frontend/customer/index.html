@@ -522,9 +522,30 @@
                 }
 
                 const orders = currentTab.orders || [];
-                const total = orders.reduce((sum, order) => {
+
+                const subtotal = orders.reduce((sum, order) => {
                     return sum + ((order.price || 0) * order.quantity);
                 }, 0);
+
+                const applyServiceFee = currentTab.apply_service_fee === true;
+                const applyCouvert = currentTab.apply_couvert === true;
+
+                const servicePercentage = Number(currentTab.service_fee_percentage || 10);
+                const couvertPrice = Number(currentTab.couvert_price || 0);
+
+                const serviceValue = applyServiceFee
+                    ? subtotal * (servicePercentage / 100)
+                    : 0;
+
+                const couvertValue = applyCouvert
+                    ? couvertPrice
+                    : 0;
+
+                const total = Number(
+                    currentTab.current_bill_total ??
+                    (subtotal + serviceValue + couvertValue)
+                );
+
                 const isClosingFlow = currentTab.is_requesting_close || currentTab.is_closing_confirmed;
 
                 const container = document.getElementById("my-orders");
@@ -534,17 +555,36 @@
                     container.innerHTML = "<p>Nenhum pedido feito ainda.</p>";
                 } else if (isClosingFlow) {
                     container.innerHTML = `
-                <h2>🧾 Consumo da Comanda</h2>
-                ${orders.length === 0 ? "<p>Nenhum pedido feito ainda.</p>" : orders.map(order => `
-                    <p>
-                        ${order.product_name} x${order.quantity}
-                        — R$ ${((order.price || 0) * order.quantity).toFixed(2)}
-                    </p>
-                `).join("")}
-                <hr>
-                <h2>Total: R$ ${total.toFixed(2)}</h2>
-                <p>Aguarde o garçom para realizar o pagamento.</p>
-            `;
+                        <h2>🧾 Consumo da Comanda</h2>
+
+                        ${orders.length === 0
+                        ? "<p>Nenhum pedido feito ainda.</p>"
+                        : orders.map(order => `
+                            <p>
+                                ${order.product_name} x${order.quantity}
+                                — R$ ${((order.price || 0) * order.quantity).toFixed(2)}
+                            </p>
+                        `).join("")
+                    }
+
+                        <hr>
+
+                        <p>Subtotal: R$ ${subtotal.toFixed(2)}</p>
+
+                        ${applyServiceFee
+                        ? `<p>Taxa de serviço (${servicePercentage}%): R$ ${serviceValue.toFixed(2)}</p>`
+                        : ""
+                        }
+
+                        ${applyCouvert
+                        ? `<p>Couvert artístico: R$ ${couvertValue.toFixed(2)}</p>`
+                        : ""
+                        }
+
+                        <h2>Total: R$ ${total.toFixed(2)}</h2>
+
+                        <p>Aguarde o garçom para realizar o pagamento.</p>
+                    `;
                 } else {
                     container.innerHTML = orders.map(order => `
                 <p>

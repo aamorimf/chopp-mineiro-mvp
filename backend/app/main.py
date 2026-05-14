@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
 from app.seed import seed_data
-from app.routes import tables, products, tabs, orders
+from app.routes import tables, products, tabs, orders, settings
 
 app = FastAPI(
     title="Chopp do Mineiro MVP",
@@ -34,3 +34,4 @@ app.include_router(tables.router)
 app.include_router(products.router)
 app.include_router(tabs.router)
 app.include_router(orders.router)
+app.include_router(settings.router)

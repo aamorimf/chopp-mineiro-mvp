@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import Table, Tab, TableSession, Order, Product
-from app.schemas import TabCreate, TabCloseRequest
+from app.schemas import TabCreate, TabCloseRequest, TabBillUpdate
 
 router = APIRouter(prefix="/tabs", tags=["Tabs"])
 
@@ -461,6 +461,31 @@ def cancel_waiter(tab_id: int, db: Session = Depends(get_db)):
     db.refresh(tab)
 
     return {"message": "Chamada cancelada"}
+
+@router.patch("/{tab_id}/bill")
+def update_tab_bill(
+    tab_id: int,
+    data: TabBillUpdate,
+    db: Session = Depends(get_db)
+):
+    tab = db.query(Tab).filter(Tab.id == tab_id).first()
+
+    if not tab:
+        raise HTTPException(status_code=404, detail="Comanda não encontrada")
+
+    tab.apply_service_fee = data.apply_service_fee
+    tab.apply_couvert = data.apply_couvert
+    tab.current_bill_total = data.current_bill_total
+
+    db.commit()
+    db.refresh(tab)
+
+    return {
+        "message": "Conta atualizada",
+        "apply_service_fee": tab.apply_service_fee,
+        "apply_couvert": tab.apply_couvert,
+        "current_bill_total": tab.current_bill_total,
+    }
 
 @router.patch("/{tab_id}/confirm-close")
 def confirm_close(tab_id: int, db: Session = Depends(get_db)):
