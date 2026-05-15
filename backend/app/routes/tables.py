@@ -248,6 +248,7 @@ def build_table_details(
         if tab.session_id:
             session = db.query(TableSession).filter(TableSession.id == tab.session_id).first()
 
+        settings = db.query(SystemSettings).first()
         result_tab = {
         "tab_id": tab.id,
         "customer_name": tab.customer_name,

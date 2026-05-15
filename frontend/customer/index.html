@@ -635,6 +635,9 @@
         }
 
         function enterClosingMode() {
+            document.getElementById("table-home-card")?.classList.add("hidden");
+            document.getElementById("open-tab-card")?.classList.add("hidden");
+            
             document.getElementById("products")?.classList.add("hidden");
             document.getElementById("cart")?.classList.add("hidden");
 

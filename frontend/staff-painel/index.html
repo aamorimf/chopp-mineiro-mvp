@@ -873,7 +873,7 @@
                   <input
                     type="checkbox"
                     id="apply-service-fee"
-                    checked
+                    ${tab.apply_service_fee !== false ? "checked" : ""}
                     onchange="recalculateReceiptTotal(${baseTotal}, ${tab.tab_id})"
                   >
                   <span>
@@ -891,7 +891,7 @@
                   <input
                     type="checkbox"
                     id="apply-couvert"
-                    checked
+                    ${tab.apply_couvert === true ? "checked" : ""}
                     onchange="recalculateReceiptTotal(${baseTotal}, ${tab.tab_id})"
                   >
                   <span>
@@ -1513,7 +1513,7 @@
           },
           body: JSON.stringify({
             payment_method: paymentMethod,
-            closed_total: recalculateReceiptTotal(closedTotal)
+            closed_total: await recalculateReceiptTotal(closedTotal, tabId)
           })
         });
       } catch (error) {
